@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pédale — v0.0.1</title>
+<style>
+  :root { --ink:#1f2328; --paper:#fbf7ea; --paper2:#f1ead2; --line:#d9cfae; --accent:#e4572e; --good:#2f8f4e; --bad:#c2392f; --mute:#6d6a5c; }
+  * { box-sizing: border-box; }
+  html,body { margin:0; height:100%; background:#94ae63; overflow:hidden; font-family:"Trebuchet MS", system-ui, sans-serif; color:var(--ink); }
+  #stage { position:fixed; inset:0 372px 0 0; }
+  #stage canvas { display:block; }
+  .card { background:rgba(251,247,234,.94); border-radius:8px; box-shadow:0 2px 0 rgba(0,0,0,.22); }
+  #hud { position:fixed; left:14px; top:12px; display:flex; flex-direction:column; gap:6px; pointer-events:none; }
+  #hud h1 { margin:0; font-size:13px; letter-spacing:.16em; text-transform:uppercase; padding:6px 10px; display:inline-block; }
+  #hud .stats { display:flex; gap:6px; flex-wrap:wrap; }
+  .stat { padding:5px 10px 6px; min-width:96px; }
+  .stat small { display:block; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--mute); }
+  .stat b { font-size:19px; font-variant-numeric:tabular-nums; }
+  .stat.warn b { color:var(--bad); }
+  #feed { position:fixed; left:14px; bottom:142px; width:340px; display:flex; flex-direction:column; gap:4px; pointer-events:none; }
+  #feed div { padding:5px 9px; font-size:12px; animation:in .25s ease-out; border-left:4px solid var(--line); }
+  #feed div.grave { border-left-color:var(--accent); font-weight:700; }
+  #feed time { color:var(--mute); margin-right:6px; font-variant-numeric:tabular-nums; font-weight:400; }
+  @keyframes in { from { opacity:0; transform:translateX(-12px);} to { opacity:1; transform:none; } }
+  #bottom { position:fixed; left:14px; right:386px; bottom:12px; display:flex; flex-direction:column; gap:8px; }
+  #strip { height:74px; position:relative; }
+  #strip .track { position:absolute; left:40px; right:44px; top:0; bottom:0; }
+  #strip .rail { position:absolute; left:0; right:0; top:34px; height:6px; background:var(--paper2); border-radius:3px; border:1px solid var(--line); }
+  #strip .brk { position:absolute; top:12px; transform:translateX(-100%); background:#fff; border:2px solid #222; border-radius:12px; padding:2px 4px; display:flex; gap:2px; }
+  #strip .brk i { width:8px; height:8px; border-radius:50%; border:1px solid #222; display:block; }
+  #strip .pelo { position:absolute; top:44px; transform:translateX(-50%); background:#555; color:#fff; font-size:10px; padding:1px 7px; border-radius:4px; white-space:nowrap; }
+  #strip .flag { position:absolute; right:12px; top:22px; font-size:20px; }
+  #strip .lab { position:absolute; top:58px; font-size:10px; color:var(--mute); } #strip .l0 { left:0; } #strip .l1 { right:0; }
+  #controls { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  button { font:600 12px "Trebuchet MS", system-ui, sans-serif; border:0; border-radius:6px; padding:7px 11px; background:var(--paper); color:var(--ink); box-shadow:0 2px 0 rgba(0,0,0,.28); cursor:pointer; }
+  button:hover { background:#fff; } button:active { transform:translateY(1px); box-shadow:0 1px 0 rgba(0,0,0,.28); }
+  button.on { background:var(--ink); color:#fff; }
+  kbd { background:#e7dfc4; border-radius:3px; padding:0 4px; margin-right:4px; font:600 10px monospace; color:var(--ink); }
+  button.on kbd { background:#444; color:#fff; }
+  label.chk { font-size:12px; background:var(--paper); padding:6px 10px; border-radius:6px; box-shadow:0 2px 0 rgba(0,0,0,.28); cursor:pointer; }
+  #side { position:fixed; right:0; top:0; bottom:0; width:372px; background:var(--paper); border-left:2px solid var(--line); display:flex; flex-direction:column; }
+  #riders { padding:10px 10px 4px; border-bottom:2px solid var(--line); }
+  #riders h2, #trace h2 { margin:0 0 6px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--mute); display:flex; justify-content:space-between; }
+  .legend i { display:inline-block; width:9px; height:9px; border-radius:2px; margin:0 3px 0 8px; vertical-align:-1px; }
+  .rider { display:grid; grid-template-columns:30px 1fr 70px; gap:8px; align-items:center; padding:5px 6px; border-radius:7px; cursor:pointer; border:2px solid transparent; }
+  .rider:hover { background:var(--paper2); } .rider.sel { border-color:var(--ink); background:#fff; }
+  .rider.out { opacity:.45; }
+  .badge { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; font-weight:800; font-size:14px; color:#111; border:2px solid #222; }
+  .l1 { display:flex; gap:6px; align-items:center; font-size:12px; white-space:nowrap; overflow:hidden; }
+  .chip { --c:#888; display:inline-block; padding:1px 7px; border-radius:10px; background:var(--c); color:#fff; font-size:11px; font-weight:700; }
+  .bars { margin-top:3px; display:grid; gap:2px; }
+  .bars i { display:block; height:5px; border-radius:3px; background:#e4dcc0; position:relative; overflow:hidden; }
+  .bars i b { position:absolute; inset:0 auto 0 0; border-radius:3px; }
+  .bars .e b { background:#2f8f4e; } .bars .x b { background:#e49a2e; }
+  .rider .num { text-align:right; font-size:11px; color:var(--mute); line-height:1.3; font-variant-numeric:tabular-nums; }
+  .rider .num b { color:var(--ink); font-size:13px; }
+  #trace { padding:10px 12px 12px; overflow:auto; flex:1; font-size:12.5px; line-height:1.45; }
+  #trace .who { font-size:15px; font-weight:800; margin-bottom:4px; }
+  #trace .sec { margin-top:9px; } #trace .sec > b { display:block; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--mute); margin-bottom:2px; }
+  #trace .pills span { display:inline-block; background:var(--paper2); border-radius:10px; padding:1px 8px; margin:0 4px 4px 0; font-size:11.5px; }
+  .why { display:grid; grid-template-columns:44px 1fr; gap:6px; align-items:center; margin:2px 0; }
+  .why .v { font-weight:800; text-align:right; font-variant-numeric:tabular-nums; } .why .v.p { color:var(--good); } .why .v.n { color:var(--bad); }
+  .why .t { position:relative; }
+  .why .bar { height:3px; border-radius:2px; margin-top:1px; } .why .bar.p { background:var(--good); } .why .bar.n { background:var(--bad); }
+  .alt { display:grid; grid-template-columns:auto 1fr auto; gap:6px; font-size:11.5px; padding:2px 0; border-bottom:1px dotted var(--line); }
+  .alt.veto { color:var(--mute); } .alt .sc { font-variant-numeric:tabular-nums; font-weight:700; }
+  .quote { background:#fff; border-left:4px solid var(--ink); padding:6px 9px; border-radius:0 6px 6px 0; margin-top:4px; }
+  .muted { color:var(--mute); font-size:11px; }
+  #end { position:fixed; inset:0; background:rgba(20,25,10,.5); display:grid; place-items:center; z-index:10; }
+  #end[hidden] { display:none; }
+  #end .box { background:var(--paper); padding:22px 26px; border-radius:12px; width:min(520px, 92vw); box-shadow:0 8px 0 rgba(0,0,0,.25); }
+  #end h2 { margin:0 0 4px; font-size:22px; } #end .sub { color:var(--mute); margin-bottom:12px; }
+  #end ol { margin:0 0 14px; padding:0; list-style:none; display:grid; gap:4px; }
+  #end li { display:flex; gap:8px; align-items:center; font-size:13px; }
+  #end .btns { display:flex; gap:8px; flex-wrap:wrap; }
+  #end .btns button { padding:9px 14px; }
+  @media (max-width:980px){ #side{display:none} #stage{inset:0} #bottom{right:14px} }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="hud">
+  <h1 class="card">Pédale · v0.0.1 · une échappée sur le plat</h1>
+  <div class="stats">
+    <div class="stat card"><small>Distance restante</small><b id="sKm">—</b></div>
+    <div class="stat card" id="sGapBox"><small>Écart au peloton</small><b id="sGap">—</b></div>
+    <div class="stat card"><small>Vitesse du groupe</small><b id="sSpd">—</b></div>
+    <div class="stat card"><small>Vent de face</small><b id="sWind">—</b></div>
+    <div class="stat card"><small>Temps de course</small><b id="sT">—</b></div>
+  </div>
+</div>
+<div id="feed"></div>
+<div id="bottom">
+  <div id="strip" class="card"></div>
+  <div id="controls">
+    <button data-sp="0" id="bPause"><kbd>Espace</kbd>Pause</button>
+    <button data-sp="1"><kbd>1</kbd>×1</button>
+    <button data-sp="4"><kbd>2</kbd>×4</button>
+    <button data-sp="16"><kbd>3</kbd>×16</button>
+    <button data-sp="64"><kbd>4</kbd>×64</button>
+    <label class="chk"><input type="checkbox" id="auto" checked> Ralentir sur les événements</label>
+    <button id="bNew"><kbd>N</kbd>Nouvelle course</button>
+    <button id="bBiome"><kbd>B</kbd><span id="biomeName">Prairie</span></button>
+  </div>
+</div>
+<aside id="side">
+  <div id="riders"></div>
+  <div id="trace"></div>
+</aside>
+<div id="end" hidden></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
