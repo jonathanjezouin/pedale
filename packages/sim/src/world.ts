@@ -2,8 +2,9 @@ import type { Decision, Intention, Rider, SimEvent, World } from './types';
 import { INTENTIONS, INTENTION_LABEL } from './types';
 import { agir, decrireAction } from './action';
 import {
-  aspiration, capExplosif, consommer, E_CUIT, LANE, MAX_LAT_SPEED, resistance, RIDER_LEN,
+  aspiration, capExplosif, consommer, E_CUIT, MAX_LAT_SPEED, resistance, RIDER_LEN, capSoutenu,
 } from './physics';
+import { axeY, enLigne, LIMITE } from './placement';
 import { distanceSprint, engagement, evaluer, interpreter, percevoir, TUNE } from './mind';
 import { clamp } from './util';
 
@@ -23,11 +24,26 @@ function instantane(w: World) {
     const seuil = r.inGroup ? 50 : 35;
     if (actifs[i - 1]!.x - r.x <= seuil && groupe[groupe.length - 1] === actifs[i - 1]) groupe.push(r); else break;
   }
+  // vent relatif de chaque coureur : le vent est fixe dans le monde, la route tourne
+  for (const r of actifs) {
+    if (w.cfg.ventMode === 'face') { r.hw = w.cfg.vent; r.cw = 0; continue; }
+    const h = w.road.heading(r.x), hx = Math.cos(h), hy = Math.sin(h);
+    r.hw = -(w.vent.wx * hx + w.vent.wy * hy);
+    r.cw = w.vent.wx * -hy + w.vent.wy * hx;
+  }
   const vitesse = groupe.length ? groupe.reduce((s, r) => s + r.v, 0) / groupe.length : 0;
-  let meneur: Rider | null = null;
-  for (const r of groupe) if (Math.abs(r.y) < 0.8 && (!meneur || r.x > meneur.x)) meneur = r;
+  const ref = groupe.length ? groupe : actifs;
+  const cwMoy = ref.length ? ref.reduce((s, r) => s + r.cw, 0) / ref.length : 0;
+  const alongMoy = ref.length ? ref.reduce((s, r) => s + r.v + r.hw, 0) / ref.length : 10;
+  const tanB = Math.max(-1.2, Math.min(1.2, cwMoy / Math.max(2, alongMoy)));
+  const coteMontant: -1 | 1 = Math.abs(cwMoy) < 0.5 ? -1 : cwMoy > 0 ? -1 : 1;   // côté du vent
+  const k = Math.max(0, Math.min(1, (Math.abs(tanB) - 0.05) / 0.25));
+  const xFront = groupe.length ? groupe[0]!.x : 0;
   const xMoyen = actifs.length ? actifs.reduce((s, r) => s + r.x, 0) / actifs.length : 0;
-  w.groupe = { ordre: actifs, groupe, vitesse, meneur, queue: groupe[groupe.length - 1] ?? null, xMoyen };
+  w.groupe = { ordre: actifs, groupe, vitesse, meneur: null, queue: groupe[groupe.length - 1] ?? null, xMoyen, xFront, tanB, yTete: coteMontant * k * (LIMITE - 0.5), coteMontant };
+  let meneur: Rider | null = null;
+  for (const r of groupe) if (enLigne(w, r) && (!meneur || r.x > meneur.x)) meneur = r;
+  w.groupe.meneur = meneur;
   for (const r of actifs) {
     r.wasInGroup = r.inGroup;
     r.inGroup = groupe.includes(r);
@@ -137,24 +153,32 @@ function decisions(w: World) {
 
 /* ------------------------ physique ------------------------ */
 function physique(w: World) {
-  const dt = w.cfg.dt, vent = w.cfg.vent;
+  const dt = w.cfg.dt;
   const act = w.groupe.ordre;
   for (const r of act) r.draft = aspiration(r, act);
   const cmds = act.map((r) => ({ r, c: agir(w, r) }));
   for (const { r, c } of cmds) {
     const p = clamp(c.p, 0, capExplosif(r));
     // bilan de forces : m·a = P/v − F
-    const acc = (p / Math.max(r.v, 2) - resistance(r.v, r.draft, r, vent)) / r.profile.mass;
+    const acc = (p / Math.max(r.v, 2) - resistance(r.v, r.draft, r)) / r.profile.mass;
     r.v = Math.max(0, r.v + acc * dt);
-    r.x += r.v * dt;
+    // vitesse sol → avancement le long de la ligne centrale : à l'intérieur d'un virage on parcourt moins de distance
+    r.x += (r.v * dt) / Math.max(0.5, 1 - w.road.courbure(r.x) * r.y);
+    // posture visible (cocottes / bas du cintre / danseuse / écrasé), avec un temps minimal entre deux changements
+    let post: 0 | 1 | 2 | 3 = 0;
+    if (r.intent.kind === 'attaquer' && (r.intent.sprint || r.intent.phase === 'burst')) post = 2;
+    else if (r.E < 0.2) post = 3;
+    else if (p > 0.9 * capSoutenu(r) && r.draft < 0.15) post = 1;
+    if (post !== r.posture && w.t - r.postureT > 1.5) { r.posture = post; r.postureT = w.t; }
     r.p = p;
     consommer(r, p, dt);
     r.stats.tempsParIntention[r.intent.kind ?? 'abriter'] += dt;
     // déplacement latéral (on n'entre dans la file que s'il y a de la place)
     const dy = clamp(c.yT - r.y, -MAX_LAT_SPEED * dt, MAX_LAT_SPEED * dt);
-    const ny = r.y + dy;
-    if (Math.abs(ny) < 0.9 && Math.abs(r.y) >= 0.9) {
-      const occupe = act.some((o) => o !== r && Math.abs(o.y) < 0.9 && Math.abs(o.x - r.x) < RIDER_LEN + 0.4);
+    const ny = Math.max(-LIMITE, Math.min(LIMITE, r.y + dy));
+    // on n'entre dans la file que s'il y a de la place
+    if (!enLigne(w, r, 0.9) && Math.abs(ny - axeY(w, r.x)) < 0.9) {
+      const occupe = act.some((o) => o !== r && enLigne(w, o, 0.9) && Math.abs(o.x - r.x) < RIDER_LEN + 0.4);
       if (!occupe) r.y = ny;
     } else r.y = ny;
   }
@@ -218,7 +242,7 @@ function arrivees(w: World) {
 /** Un pas de simulation (dt fixe). */
 export function pas(w: World): void {
   if (w.result.statut === 'termine') return;
-  if (w.t === 0) evt(w, 'depart', null, `${w.riders.length} coureurs à l'avant, ${Math.round(w.ecart)} s d'avance, vent de face ${w.cfg.vent} m/s`);
+  if (w.t === 0) evt(w, 'depart', null, `${w.riders.length} coureurs à l'avant, ${Math.round(w.ecart)} s d'avance, vent ${w.cfg.ventMode === 'face' ? 'de face' : 'fixe'} ${w.cfg.vent} m/s`);
   instantane(w);
   suiviDeTete(w);
   decisions(w);
@@ -234,4 +258,4 @@ export function simuler(w: World, tMax = 7200): World {
   return w;
 }
 
-export { INTENTIONS, INTENTION_LABEL, LANE };
+export { INTENTIONS, INTENTION_LABEL };

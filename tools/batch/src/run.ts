@@ -5,6 +5,7 @@ import type { Archetype, Intention } from '@pedale/sim';
 
 const arg = (name: string, def: string) => { const i = process.argv.indexOf('--' + name); return i >= 0 ? process.argv[i + 1]! : def; };
 const N = Number(arg('n', '300')), SEED0 = Number(arg('seed0', '1'));
+const VENT = arg('vent', 'fixe') as 'fixe' | 'face', ROUTE = arg('route', 'courbes') as 'courbes' | 'droite';
 const ARCHS = Object.keys(ARCHETYPE_LABEL) as Archetype[];
 const pct = (a: number, b: number) => (b ? ((100 * a) / b).toFixed(0) : '0') + ' %';
 const moy = (a: number[]) => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0);
@@ -23,7 +24,7 @@ const courses: Course[] = [];
 const t0 = Date.now();
 for (let i = 0; i < N; i++) {
   const seed = SEED0 + i;
-  const w = simuler(creerMonde({ seed, trace: 'changements' }));
+  const w = simuler(creerMonde({ seed, trace: 'changements', ventMode: VENT, route: ROUTE }));
   const parArch = <T,>(init: T) => Object.fromEntries(ARCHS.map((a) => [a, init])) as Record<Archetype, T>;
   const partTete = parArch(0), attaquesParArch = parArch(0);
   let totalLead = 0;
@@ -54,7 +55,7 @@ for (let i = 0; i < N; i++) {
 
 /* ------------------------------ rapport ------------------------------ */
 const surv = courses.filter((c) => c.survit);
-console.log(`\n# Batch POC v0.0.1 — ${N} courses (seeds ${SEED0}…${SEED0 + N - 1}) en ${((Date.now() - t0) / 1000).toFixed(1)} s\n`);
+console.log(`\n# Batch POC — ${N} courses (seeds ${SEED0}…${SEED0 + N - 1}), vent ${VENT}, route ${ROUTE}, en ${((Date.now() - t0) / 1000).toFixed(1)} s\n`);
 
 console.log('## 3. Survie / reprise de l’échappée');
 console.log(`Survie globale : ${pct(surv.length, N)}`);

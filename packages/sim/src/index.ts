@@ -1,5 +1,7 @@
 export * from './types';
 export * from './physics';
+export * from './road';
+export { axeY, enLigne, decalage, LIMITE } from './placement';
 export { creerMonde, configParDefaut } from './scenario';
 export { pas, simuler } from './world';
 export { percevoir, interpreter, evaluer, TUNE, distanceSprint, engagement } from './mind';

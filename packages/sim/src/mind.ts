@@ -10,6 +10,7 @@ import type {
 import { INTENTIONS, ARCHETYPE_LABEL } from './types';
 import { E_CUIT, X_MIN } from './physics';
 import { clamp, smoothstep } from './util';
+import { abrite, enLigne } from './placement';
 
 /** Tous les « boutons » de réglage des raisons au même endroit (équilibrage par le batch). */
 export const TUNE = {
@@ -47,7 +48,7 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
   const dansGroupe = g.groupe.includes(r);
   const rang = dansGroupe ? g.groupe.indexOf(r) : g.groupe.length;
   const devant = voisinDevant(w, r);
-  const estEnTete = dansGroupe && Math.abs(r.y) < 0.8 && !g.groupe.some((o) => o !== r && o.x > r.x && Math.abs(o.y - r.y) < 1.0);
+  const estEnTete = dansGroupe && enLigne(w, r) && !g.groupe.some((o) => o !== r && abrite(w, o, r, 1.0, 1e9));
   const tempsEnTete = w.meneurId === r.id ? w.t - w.meneurDepuis : 0;
   const sumLead = g.ordre.reduce((s, o) => s + o.stats.leadRecent, 0);
   const moyAutres = actifs.length ? actifs.reduce((s, o) => s + o.stats.leadRecent, 0) / actifs.length : 0;
@@ -83,7 +84,7 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
       sprinteurLetter: meilleur && meilleur.profile.pointe > r.profile.pointe + 0.08 ? meilleur.letter : null,
       attaque, autres,
     },
-    course: { ecart: w.ecart, tendance: w.tendance, distRestante: Math.max(0, w.finishX - r.x - 0.9), distParcourue: r.x },
+    course: { ecart: w.ecart, tendance: w.tendance, distRestante: Math.max(0, w.finishX - r.x - 0.9), distParcourue: r.x, ventFace: r.hw, ventCote: r.cw },
     role: { objectif: 'gagner' },
     profil: { endurance: r.profile.tEnd, pointe: r.profile.pointe, generosite: r.profile.generosite, agressivite: r.profile.agressivite, experience: r.profile.experience },
   };
@@ -96,8 +97,7 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
 export function voisinDevant(w: World, r: Rider, tolLat = 1.0, portee = 35): Rider | null {
   let best: Rider | null = null;
   for (const o of w.groupe.ordre) {
-    if (o === r || o.x <= r.x || Math.abs(o.y - r.y) >= tolLat) continue;
-    if (o.x - r.x > portee) continue;
+    if (o === r || !abrite(w, o, r, tolLat, portee)) continue;
     if (!best || o.x < best.x) best = o;
   }
   return best;

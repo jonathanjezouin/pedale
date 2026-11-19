@@ -6,7 +6,7 @@ export const RHO = 1.2;
 export const G = 9.81;
 export const CRR = 0.004;
 export const RIDER_LEN = 1.8;       // m
-export const LANE = 1.5;            // m : décalage du couloir latéral
+export const MARGE_BORD = 0.45;     // m : un coureur reste à au moins cette distance du bord de la route
 export const MAX_LAT_SPEED = 0.9;   // m/s
 export const E_CUIT = 0.12;         // seuil « sans réserve » (§6.3 Veto)
 export const X_MIN = 0.15;          // explosivité minimale pour attaquer / suivre
@@ -25,16 +25,19 @@ export function capExplosif(r: Rider): number {
   return Math.max(s, r.profile.cp + (r.profile.pPeak * fE - r.profile.cp) * k);
 }
 
-/** Force de résistance à vitesse v avec une réduction de traînée `draft` (aspiration). */
-export function resistance(v: number, draft: number, r: Rider, vent: number): number {
-  const air = Math.max(0, v + vent);
-  return 0.5 * RHO * r.profile.cda * (1 - draft) * air * air + CRR * r.profile.mass * G;
+/** Force de résistance à vitesse v avec une réduction de traînée `draft` (aspiration).
+ *  Le vent est décomposé dans le repère du coureur : de face (hw) et de côté (cw).
+ *  Composante longitudinale de la traînée : ½ρ·CdA·|a|·(v + hw), avec |a|² = (v + hw)² + cw². */
+export function resistance(v: number, draft: number, r: Rider): number {
+  const along = v + r.hw;
+  const air = Math.sqrt(along * along + r.cw * r.cw);
+  return 0.5 * RHO * r.profile.cda * (1 - draft) * air * along + CRR * r.profile.mass * G;
 }
 
 /** Puissance nécessaire pour tenir `vTarget` en partant de `v` (bilan de forces + accélération demandée). */
-export function puissanceVers(vTarget: number, v: number, r: Rider, vent: number, aMax = 1.2): number {
+export function puissanceVers(vTarget: number, v: number, r: Rider, aMax = 1.2): number {
   const acc = clamp(1.0 * (vTarget - v), -aMax, aMax);
-  return (resistance(v, r.draft, r, vent) + r.profile.mass * acc) * Math.max(v, 2);
+  return (resistance(v, r.draft, r) + r.profile.mass * acc) * Math.max(v, 2);
 }
 
 /** Vitesse d'équilibre en solo pour une puissance donnée (bissection). */
@@ -49,15 +52,20 @@ export function vitesseSolo(power: number, cda: number, mass: number, vent: numb
   return (lo + hi) / 2;
 }
 
-/** Réduction de traînée due aux coureurs devant (couloir ±0,9 m, décroît avec la distance). */
+/** Tangente de l'angle du vent relatif vu par un coureur (le sillage dérive du côté où va l'air). */
+export const tanVent = (r: Rider) => clamp(r.cw / Math.max(2, r.v + r.hw), -1.2, 1.2);
+
+/** Réduction de traînée due aux coureurs devant. Le sillage d'un coureur dérive latéralement avec le vent de côté :
+ *  à `gap` mètres derrière lui il est centré à o.y + gap·tanβ. De face : tout droit derrière ; de côté : en éventail. */
 export function aspiration(self: Rider, others: Rider[]): number {
   let d1 = 0, d2 = 0;
+  const tb = tanVent(self);
   for (const o of others) {
     if (o === self || o.status !== 'course') continue;
-    const dy = Math.abs(o.y - self.y);
-    if (dy >= 0.9) continue;
     const gap = o.x - self.x - RIDER_LEN;
     if (o.x <= self.x || gap > 14) continue;
+    const dy = Math.abs(self.y - (o.y + Math.max(gap, 0) * tb));
+    if (dy >= 0.9) continue;
     const d = 0.40 * Math.exp(-Math.max(gap, 0) / 3.5) * (1 - dy / 0.9);
     if (d > d1) { d2 = d1; d1 = d; } else if (d > d2) d2 = d;
   }

@@ -18,6 +18,7 @@
   .stat small { display:block; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--mute); }
   .stat b { font-size:19px; font-variant-numeric:tabular-nums; }
   .stat.warn b { color:var(--bad); }
+  #mini { position:fixed; right:386px; top:12px; width:200px; height:140px; }
   #feed { position:fixed; left:14px; bottom:142px; width:340px; display:flex; flex-direction:column; gap:4px; pointer-events:none; }
   #feed div { padding:5px 9px; font-size:12px; animation:in .25s ease-out; border-left:4px solid var(--line); }
   #feed div.grave { border-left-color:var(--accent); font-weight:700; }
@@ -86,10 +87,11 @@
     <div class="stat card"><small>Distance restante</small><b id="sKm">—</b></div>
     <div class="stat card" id="sGapBox"><small>Écart au peloton</small><b id="sGap">—</b></div>
     <div class="stat card"><small>Vitesse du groupe</small><b id="sSpd">—</b></div>
-    <div class="stat card"><small>Vent de face</small><b id="sWind">—</b></div>
+    <div class="stat card"><small>Vent</small><b><span id="sWind">—</span> <svg id="windArrow" width="22" height="22" viewBox="-11 -11 22 22"><path d="M-9 0H8M2 -6L8 0L2 6" fill="none" stroke="#1f2328" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></b><small id="sWindRel" style="margin-top:2px;text-transform:none;letter-spacing:0"></small></div>
     <div class="stat card"><small>Temps de course</small><b id="sT">—</b></div>
   </div>
 </div>
+<canvas id="mini" class="card" width="200" height="140"></canvas>
 <div id="feed"></div>
 <div id="bottom">
   <div id="strip" class="card"></div>
@@ -102,6 +104,8 @@
     <label class="chk"><input type="checkbox" id="auto" checked> Ralentir sur les événements</label>
     <button id="bNew"><kbd>N</kbd>Nouvelle course</button>
     <button id="bBiome"><kbd>B</kbd><span id="biomeName">Prairie</span></button>
+    <button id="bVent"><kbd>V</kbd><span id="ventName">Vent fixe</span></button>
+    <button id="bRoute"><kbd>R</kbd><span id="routeName">Route qui tourne</span></button>
   </div>
 </div>
 <aside id="side">

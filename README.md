@@ -5,6 +5,7 @@ Jeu de cyclisme sur route, vue 100 % de dessus. On incarne un seul coureur, de l
 - Conception fonctionnelle : [`docs/v0.0.1-design-fonctionnel.md`](docs/v0.0.1-design-fonctionnel.md)
 - Choix techniques : [`docs/stack-technique.md`](docs/stack-technique.md)
 - Validation statistique du POC v0.0.1 : [`docs/v0.0.1-validation.md`](docs/v0.0.1-validation.md)
+- Route, vent et placement : [`docs/v0.0.1-trajectoires.md`](docs/v0.0.1-trajectoires.md)
 - POC graphique initial (HTML seul) : [`docs/poc-graphique/`](docs/poc-graphique/index.html)
 
 ## POC v0.0.1 — une échappée sur le plat
@@ -19,13 +20,14 @@ Cliquer un coureur (ou `Tab`) affiche **pourquoi** il fait ce qu'il fait.
 npm install
 npm run dev          # jeu dans le navigateur : http://localhost:5173  (?seed=1234&biome=desert)
 npm test             # tests du cœur de simulation (Vitest)
-npm run batch -- --n 500    # 500 courses sans affichage + vérification des critères de réussite (§6.6)
+npm run batch -- --n 500    # 500 courses sans affichage + critères de réussite (§6.6) ; --vent face --route droite pour l'ancien mode
 npm run build        # build web (apps/game/dist)
 npm run electron     # build + fenêtre Electron
 npm run dist         # installeur Windows (electron-builder) — à lancer sous Windows
 ```
 
-Raccourcis : `Espace` pause · `1-4` vitesse ×1/×4/×16/×64 · `Tab` coureur suivant · `N` nouvelle course · `B` biome · molette = zoom.
+Raccourcis : `Espace` pause · `1-4` vitesse ×1/×4/×16/×64 · `Tab` coureur suivant · `N` nouvelle course · `B` biome · `V` vent fixe / de face · `R` route qui tourne / droite · molette = zoom.
+Paramètres d'URL : `?seed=1234&biome=desert&vent=face&route=droite`.
 
 ### Organisation
 

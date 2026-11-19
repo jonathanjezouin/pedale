@@ -3,6 +3,8 @@
    Les noms suivent le document de conception fonctionnelle v0.0.1.
    ===================================================================== */
 
+import type { Road } from './road';
+
 export type Archetype = 'rouleur' | 'sprinteur' | 'attaquant' | 'opportuniste';
 
 export const ARCHETYPE_LABEL: Record<Archetype, string> = {
@@ -40,6 +42,7 @@ export interface Profile {
   experience: number;   // 0..1 (réduit les défauts ; sert surtout au bruit, plus tard)
   // dérivé
   pointe: number;       // 0..1, pointe de vitesse normalisée
+  lateral: number;      // habitude de placement : décalage latéral personnel dans la file (m)
   objectif: 'gagner';
 }
 
@@ -90,6 +93,10 @@ export interface Rider {
   cuit: boolean;
   last: Decision | null;   // dernière décision (pour l'explication)
   draft: number;           // réduction de traînée actuelle 0..0.5
+  hw: number;              // vent de face ressenti (m/s, > 0 = de face) — calculé à chaque pas
+  cw: number;              // vent de côté (m/s, > 0 = vient de la gauche, pousse vers la droite)
+  posture: 0 | 1 | 2 | 3;  // 0 sur les cocottes, 1 en bas du cintre, 2 en danseuse, 3 écrasé de fatigue
+  postureT: number;
 }
 
 /* ------------------------- Perception / interprétation ------------------------- */
@@ -119,7 +126,7 @@ export interface Percu {
     attaque: { id: number; letter: string; avance: number; depuis: number; danger: number } | null;
     autres: AutreCoureur[];
   };
-  course: { ecart: number; tendance: number; distRestante: number; distParcourue: number };
+  course: { ecart: number; tendance: number; distRestante: number; distParcourue: number; ventFace: number; ventCote: number };
   role: { objectif: 'gagner' };
   profil: { endurance: number; pointe: number; generosite: number; agressivite: number; experience: number };
 }
@@ -172,7 +179,10 @@ export interface Config {
   seed: number;
   distance: number;      // m restants au départ de la simulation
   ecartInit: number;     // s d'avance sur le peloton
-  vent: number;          // m/s de vent de face
+  vent: number;          // m/s : vitesse du vent
+  ventMode: 'fixe' | 'face';   // fixe : direction constante dans le monde ; face : toujours de face
+  ventDecalage: number;  // rad : écart de la direction du vent au cap moyen de la route
+  route: 'courbes' | 'droite';
   vPeloton: number;      // m/s : vitesse de base du peloton poursuivant
   nbCoureurs: number;
   dt: number;
@@ -217,6 +227,8 @@ export interface World {
   result: Result;
   nextEventId: number;
   vRef: number;                // vitesse que l'échappée cherche à tenir (m/s)
+  road: Road;
+  vent: { wx: number; wy: number };   // vecteur vitesse de l'air dans le monde (m/s)
 }
 
 export interface GroupSnap {
@@ -226,4 +238,8 @@ export interface GroupSnap {
   meneur: Rider | null;
   queue: Rider | null;
   xMoyen: number;
+  xFront: number;            // abscisse du coureur le plus avancé
+  tanB: number;              // tangente de l'angle du vent relatif : décalage latéral du sillage par mètre
+  yTete: number;             // décalage latéral de la tête de file (côté du vent si vent de côté)
+  coteMontant: -1 | 1;       // côté où l'on remonte la file (côté du vent)
 }

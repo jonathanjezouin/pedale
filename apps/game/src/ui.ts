@@ -18,7 +18,16 @@ export function updateHud(w: World) {
   $('sGap').textContent = (w.ecart >= 0 ? '+' : '−') + fmtT(Math.abs(w.ecart)) + (w.tendance < -3 ? ' ▼' : w.tendance > 3 ? ' ▲' : '');
   $('sGapBox').classList.toggle('warn', w.ecart < 40);
   $('sSpd').textContent = `${(g.vitesse * 3.6).toFixed(1)} km/h`;
+  const lead = g.ordre[0];
   $('sWind').textContent = `${w.cfg.vent.toFixed(1)} m/s`;
+  if (lead) {
+    const ang = Math.atan2(Math.abs(lead.cw), lead.hw) * 180 / Math.PI;           // 0° = de face, 90° = de côté, 180° = dans le dos
+    const lab = ang < 25 ? 'de face' : ang < 65 ? 'de trois-quarts face' : ang < 115 ? 'de côté' : ang < 155 ? 'de trois-quarts dos' : 'dans le dos';
+    const cote = ang >= 25 && ang <= 155 ? (lead.cw > 0 ? ' (de gauche)' : ' (de droite)') : '';
+    $('sWindRel').textContent = w.cfg.ventMode === 'face' ? 'toujours de face' : lab + cote;
+    const dir = w.cfg.ventMode === 'face' ? w.road.heading(lead.x) + Math.PI : Math.atan2(w.vent.wy, w.vent.wx);
+    document.getElementById('windArrow')!.style.transform = `rotate(${dir}rad)`;
+  }
   $('sT').textContent = fmtT(w.t);
 }
 
@@ -67,6 +76,7 @@ export function updateTrace(w: World, id: number) {
     `réserve ${Math.round(p.moi.reserve * 100)} %`, `explosivité ${Math.round(p.moi.explosivite * 100)} %`,
     `groupe à ${(p.groupe.vitesse * 3.6).toFixed(0)} km/h`, `écart ${Math.round(p.course.ecart)} s (${p.course.tendance >= 0 ? '+' : '−'}${Math.abs(Math.round(p.course.tendance))} s/30 s)`,
     p.moi.dansGroupe ? (p.moi.estEnTete ? 'en tête' : `${p.moi.rang + 1}e de la file${p.moi.abrite > 0.12 ? ', abrité' : ''}`) : 'lâché',
+    `vent ${p.course.ventFace >= 0 ? 'de face' : 'dans le dos'} ${Math.abs(p.course.ventFace).toFixed(1)} m/s` + (Math.abs(p.course.ventCote) > 0.5 ? `, de côté ${Math.abs(p.course.ventCote).toFixed(1)} m/s (${p.course.ventCote > 0 ? 'de gauche' : 'de droite'})` : ''),
     ...(p.groupe.devantLetter ? [`${p.groupe.devantLetter} devant moi`] : []),
     ...(p.groupe.attaque ? [`${p.groupe.attaque.letter} attaque`] : []),
   ];
@@ -136,3 +146,25 @@ export function showEnd(w: World, handlers: { replay: () => void; next: () => vo
 }
 export const hideEnd = () => { $('end').hidden = true; };
 export type { Rider };
+
+/* ---------------- mini-carte : la route et le groupe ---------------- */
+let miniBox: { x0: number; y0: number; sc: number; ox: number; oy: number } | null = null; let miniRoad: HTMLCanvasElement | null = null; let miniFor: World | null = null;
+export function updateMini(w: World, _cam: { x: number; y: number } | null) {
+  const cv = document.getElementById('mini') as HTMLCanvasElement, ctx = cv.getContext('2d')!, road = w.road;
+  if (miniFor !== w) {
+    miniFor = w; let x0 = 1e12, y0 = 1e12, x1 = -1e12, y1 = -1e12;
+    for (let i = 0; i < road.n; i += 5) { x0 = Math.min(x0, road.X[i]!); x1 = Math.max(x1, road.X[i]!); y0 = Math.min(y0, road.Y[i]!); y1 = Math.max(y1, road.Y[i]!); }
+    const pad = 14, sc = Math.min((cv.width - 2 * pad) / Math.max(1, x1 - x0), (cv.height - 2 * pad) / Math.max(1, y1 - y0));
+    miniBox = { x0, y0, sc, ox: pad + ((cv.width - 2 * pad) - (x1 - x0) * sc) / 2, oy: pad + ((cv.height - 2 * pad) - (y1 - y0) * sc) / 2 };
+    miniRoad = document.createElement('canvas'); miniRoad.width = cv.width; miniRoad.height = cv.height;
+    const c = miniRoad.getContext('2d')!; c.fillStyle = 'rgba(251,247,234,.94)'; c.fillRect(0, 0, cv.width, cv.height);
+    c.strokeStyle = '#4b4d55'; c.lineWidth = 3.5; c.lineJoin = 'round'; c.beginPath();
+    for (let s = 0; s <= w.finishX; s += 20) { const p = road.xy(s); const X = miniBox.ox + (p.x - miniBox.x0) * miniBox.sc, Y = miniBox.oy + (p.y - miniBox.y0) * miniBox.sc; s ? c.lineTo(X, Y) : c.moveTo(X, Y); }
+    c.stroke();
+    const f = road.xy(w.finishX); c.fillStyle = '#16161a'; c.fillRect(miniBox.ox + (f.x - miniBox.x0) * miniBox.sc - 3, miniBox.oy + (f.y - miniBox.y0) * miniBox.sc - 3, 6, 6);
+  }
+  const b = miniBox!; ctx.drawImage(miniRoad!, 0, 0);
+  const at = (s: number) => { const p = road.xy(s); return { x: b.ox + (p.x - b.x0) * b.sc, y: b.oy + (p.y - b.y0) * b.sc }; };
+  const pel = at(w.peloton.x); ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(pel.x, pel.y, 3.5, 0, Math.PI * 2); ctx.fill();
+  for (const r of w.riders) { if (r.status === 'repris') continue; const p = at(r.x); ctx.fillStyle = PALETTES[r.id % PALETTES.length]!.j; ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+}

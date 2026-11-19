@@ -1,10 +1,11 @@
 import type { Archetype, Config, Profile, Rider, World } from './types';
 import { mulberry32, range, shuffle } from './rng';
 import { vitesseSolo } from './physics';
+import { creerRoute } from './road';
 import { clamp } from './util';
 
 /** Les quatre archétypes du POC (§6.4). Valeurs de base, ensuite perturbées par la seed. */
-const BASE: Record<Archetype, Omit<Profile, 'pointe' | 'objectif' | 'experience' | 'mass' | 'cda'>> = {
+const BASE: Record<Archetype, Omit<Profile, 'pointe' | 'objectif' | 'experience' | 'mass' | 'cda' | 'lateral'>> = {
   rouleur:      { cp: 342, wPrime: 17000, pPeak: 950,  tEnd: 3000, generosite: 0.85, agressivite: 0.25 },
   sprinteur:    { cp: 336, wPrime: 22000, pPeak: 1400, tEnd: 2800, generosite: 0.25, agressivite: 0.20 },
   attaquant:    { cp: 335, wPrime: 24000, pPeak: 1060, tEnd: 2600, generosite: 0.50, agressivite: 0.90 },
@@ -19,6 +20,9 @@ export function configParDefaut(seed: number): Config {
     distance: Math.round(range(r, 16000, 24000) / 100) * 100,
     ecartInit: Math.round(range(r, 55, 130)),
     vent: Math.round(range(r, 2.5, 4.5) * 10) / 10,
+    ventMode: 'fixe',
+    ventDecalage: Math.round(range(r, -0.6, 0.6) * 100) / 100,
+    route: 'courbes',
     vPeloton: 0, // calculé dans creerMonde (dépend des coureurs)
     nbCoureurs: 8,
     dt: 0.25,
@@ -35,6 +39,7 @@ function creerProfil(arch: Archetype, r: () => number): Profile {
     generosite: clamp(b.generosite + (r() - 0.5) * 0.2, 0, 1),
     agressivite: clamp(b.agressivite + (r() - 0.5) * 0.2, 0, 1),
     experience: range(r, 0.3, 0.9),
+    lateral: range(r, -0.3, 0.3),
     pointe: 0,
     objectif: 'gagner',
   };
@@ -63,12 +68,18 @@ export function creerMonde(partiel: Partial<Config> & { seed: number }): World {
         maxLeadStreak: 0, leadStreak: 0, leadStreakStart: 0,
       },
       inGroup: true, wasInGroup: true, status: 'course', finishTime: null, caughtAt: null, cuit: false, last: null, draft: 0,
+      hw: cfg.vent, cw: 0, posture: 0, postureT: 0,
     };
   });
   const cpMoy = riders.reduce((s, q) => s + q.profile.cp, 0) / riders.length;
   const cdaMoy = riders.reduce((s, q) => s + q.profile.cda, 0) / riders.length;
   const massMoy = riders.reduce((s, q) => s + q.profile.mass, 0) / riders.length;
-  const vRef = vitesseSolo(0.90 * cpMoy, cdaMoy, massMoy, cfg.vent);
+  // vitesse de référence du peloton : calée sur le vent *de face* (comparable d'un mode de vent à l'autre ; le peloton est abstrait)
+  const road = creerRoute(cfg.seed, -400, cfg.distance + 500, cfg.route === 'courbes');
+  const phi = road.capMoyen(0, cfg.distance) + cfg.ventDecalage;
+  const vent = { wx: -cfg.vent * Math.cos(phi), wy: -cfg.vent * Math.sin(phi) };
+  const hwMoy = cfg.vent;
+  const vRef = vitesseSolo(0.90 * cpMoy, cdaMoy, massMoy, hwMoy);
   if (!partiel.vPeloton) cfg.vPeloton = vRef * range(r, 0.975, 1.04);
   // file indienne initiale : écart roue 0,6 m
   place.forEach((rang, k) => { const q = riders[k]!; q.x = -rang * 2.4; q.v = vRef; });
@@ -78,8 +89,8 @@ export function creerMonde(partiel: Partial<Config> & { seed: number }): World {
     events: [], trace: [], gapHistory: [], ecart: cfg.ecartInit, tendance: 0,
     meneurId: null, meneurDepuis: 0, meneurCandidat: null, meneurCandidatDepuis: 0, changementsDeTete: 0,
     attaque: null, sprintLance: false, seuils: { ecart60: false, ecart40: false, ecart25: false },
-    groupe: { ordre: [], groupe: [], vitesse: vRef, meneur: null, queue: null, xMoyen: 0 },
+    groupe: { ordre: [], groupe: [], vitesse: vRef, meneur: null, queue: null, xMoyen: 0, xFront: 0, tanB: 0, yTete: 0, coteMontant: -1 },
     result: { statut: 'en cours', echappeeSurvit: false, ordre: [], vainqueur: null, repris: [], tFin: 0, distanceReprise: null },
-    nextEventId: 0, vRef,
+    nextEventId: 0, vRef, road, vent,
   };
 }

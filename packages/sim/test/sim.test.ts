@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { creerMonde, pas, simuler, expliquer, aspiration, puissanceVers, E_CUIT, INTENTIONS } from '../src/index';
+import { creerMonde, pas, simuler, expliquer, aspiration, puissanceVers, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF } from '../src/index';
 
 describe('simulation v0.0.1', () => {
   it('est déterministe : même seed, même course', () => {
@@ -70,5 +70,51 @@ describe('simulation v0.0.1', () => {
       expect(w.result.ordre.length + w.result.repris.length).toBe(8);
       expect(w.result.echappeeSurvit).toBe(w.result.ordre.length > 0);
     }
+  });
+
+  it('la route est lisse (rayon ≥ 450 m) et le repère latéral est perpendiculaire à la route', () => {
+    const road = creerRoute(5, -400, 20000, true);
+    let kmax = 0;
+    for (let s = -400; s < 20000; s += 10) kmax = Math.max(kmax, Math.abs(road.courbure(s)));
+    expect(kmax).toBeLessThanOrEqual(1 / 450 + 1e-9);
+    expect(kmax).toBeGreaterThan(1 / 3000);          // elle tourne bien
+    const a = road.toXY(1000, 0), b = road.toXY(1000, 3), h = road.heading(1000);
+    expect((b.x - a.x) * Math.cos(h) + (b.y - a.y) * Math.sin(h)).toBeCloseTo(0, 9);
+    expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeCloseTo(3, 9);
+    const droite = creerRoute(5, -400, 20000, false);
+    expect(Math.abs(droite.courbure(5000))).toBe(0);
+    expect(ROAD_HALF).toBe(4);
+  });
+
+  it("vent de côté : le sillage dérive, il faut se décaler pour s'abriter (éventail)", () => {
+    const w = creerMonde({ seed: 1, ventMode: 'face' });
+    const [a, b] = w.riders;
+    a!.x = 20; a!.y = 0; b!.x = 17.6; b!.status = 'course'; a!.status = 'course';
+    for (const r of [a!, b!]) { r.v = 10; r.hw = 0; r.cw = 3; }       // vent pur de côté, pousse vers la droite (d > 0)
+    b!.y = 0;
+    const toutDroit = aspiration(b!, w.riders);
+    b!.y = 0.6 * (3 / 10);                                              // décalé sous le vent d'environ gap·tanβ
+    const decale = aspiration(b!, w.riders);
+    expect(decale).toBeGreaterThan(toutDroit + 0.05);
+    for (const r of [a!, b!]) { r.cw = 0; r.hw = 3; }
+    b!.y = 0;
+    expect(aspiration(b!, w.riders)).toBeGreaterThan(0.3);              // de face : derrière la roue, comme avant
+  });
+
+  it('vent fixe : l\'angle relatif change quand la route tourne ; vent « de face » : jamais de vent de côté', () => {
+    const fixe = creerMonde({ seed: 11, ventMode: 'fixe', route: 'courbes' });
+    const cw = new Set<number>();
+    for (let s = 0; s < 20000; s += 500) { fixe.riders[0]!.x = s; pas(fixe); cw.add(Math.round(fixe.riders[0]!.cw * 10)); }
+    expect(cw.size).toBeGreaterThan(4);
+    const face = creerMonde({ seed: 11, ventMode: 'face', route: 'courbes' });
+    for (let i = 0; i < 40; i++) pas(face);
+    for (const r of face.riders) { expect(r.cw).toBe(0); expect(r.hw).toBeCloseTo(face.cfg.vent, 9); }
+  });
+
+  it('chaque coureur a son propre décalage (pas de constante unique) et reste sur la route', () => {
+    const w = simuler(creerMonde({ seed: 9 }), 900);
+    const ys = new Set(w.riders.map((r) => Math.round(r.y * 10)));
+    expect(ys.size).toBeGreaterThan(3);
+    for (const r of w.riders) expect(Math.abs(r.y)).toBeLessThanOrEqual(ROAD_HALF);
   });
 });
