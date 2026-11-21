@@ -43,12 +43,11 @@ export function engagement(r: Rider, k: Intention): number {
 /* ---------------------------- Percevoir ---------------------------- */
 
 export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
-  const g = w.groupe;
+  const g = w.vue;
   const actifs = g.ordre.filter((o) => o.id !== r.id);
-  const dansGroupe = g.groupe.includes(r);
-  const rang = dansGroupe ? g.groupe.indexOf(r) : g.groupe.length;
+  const rang = g.ordre.indexOf(r);
   const devant = voisinDevant(w, r);
-  const estEnTete = dansGroupe && enLigne(w, r) && !g.groupe.some((o) => o !== r && abrite(w, o, r, 1.0, 1e9));
+  const estEnTete = enLigne(w, r) && !g.ordre.some((o) => o !== r && abrite(w, o, r, 1.0, 1e9));
   const tempsEnTete = w.meneurId === r.id ? w.t - w.meneurDepuis : 0;
   const sumLead = g.ordre.reduce((s, o) => s + o.stats.leadRecent, 0);
   const moyAutres = actifs.length ? actifs.reduce((s, o) => s + o.stats.leadRecent, 0) / actifs.length : 0;
@@ -56,8 +55,7 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
   for (const o of actifs) if (!meilleur || o.profile.pointe > meilleur.profile.pointe) meilleur = o;
   const meilleurePointe = Math.max(r.profile.pointe, meilleur?.profile.pointe ?? 0);
   const meneur = w.meneurId !== null ? w.riders[w.meneurId]! : null;
-  const ecartMax = g.ordre.length > 1 ? Math.max(...g.ordre.slice(1).map((o, i) => g.ordre[i]!.x - o.x)) : 0;
-  let attaque: Percu['groupe']['attaque'] = null;
+  let attaque: Percu['rivaux']['attaque'] = null;
   if (w.attaque && w.attaque.id !== r.id) {
     const a = w.riders[w.attaque.id]!;
     if (a.status === 'course' && w.t - w.attaque.t < 40 && a.x > r.x) {
@@ -70,33 +68,32 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
   }));
   const percu: Percu = {
     moi: {
-      reserve: r.E, explosivite: r.X, vitesse: r.v, abrite: r.draft, rang, estEnTete, dansGroupe,
-      ecartAuGroupe: dansGroupe || !g.queue ? 0 : Math.max(0, g.queue.x - r.x),
+      reserve: r.E, explosivite: r.X, vitesse: r.v, abrite: r.draft, rang, estEnTete, decroche: r.decroche, ecartDevant: r.ecartDevant,
       tempsEnTete, leadRecent: r.stats.leadRecent, partRelais: sumLead > 0 ? r.stats.leadRecent / sumLead : 0,
     },
-    groupe: {
-      vitesse: g.vitesse, taille: g.groupe.length, soude: g.groupe.length === g.ordre.length, ecartMax,
+    rivaux: {
+      allure: g.vitesse,
       devantId: devant ? devant.id : null, devantLetter: devant ? devant.letter : null,
       meneurId: meneur ? meneur.id : null, meneurLetter: meneur ? meneur.letter : null, meneurDepuis: meneur ? w.t - w.meneurDepuis : 0,
-      quelquunPasse: g.groupe.some((o) => o !== r && o.intent.kind === 'relais' && o.intent.phase === 'passe'),
+      quelquunPasse: g.ordre.some((o) => o !== r && o.intent.kind === 'relais' && o.intent.phase === 'passe'),
       moyenneRelaisAutres: moyAutres,
       meilleurePointe, sprinteurDangereux: !!meilleur && meilleur.profile.pointe > r.profile.pointe + 0.08,
       sprinteurLetter: meilleur && meilleur.profile.pointe > r.profile.pointe + 0.08 ? meilleur.letter : null,
       attaque, autres,
     },
-    course: { ecart: w.ecart, tendance: w.tendance, distRestante: Math.max(0, w.finishX - r.x - 0.9), distParcourue: r.x, ventFace: r.hw, ventCote: r.cw },
+    course: { distRestante: Math.max(0, w.finishX - r.x - 0.9), distParcourue: r.x, ventFace: r.hw, ventCote: r.cw },
     role: { objectif: 'gagner' },
     profil: { endurance: r.profile.tEnd, pointe: r.profile.pointe, generosite: r.profile.generosite, agressivite: r.profile.agressivite, experience: r.profile.experience },
   };
   // POC : perception exacte. (Plus tard : biais durable / retard / perception grossière ici.)
-  const reel: Reel = { reserve: r.E, explosivite: r.X, ecart: w.ecart, vitesseGroupe: g.vitesse };
+  const reel: Reel = { reserve: r.E, explosivite: r.X, ecartDevant: r.ecartDevant };
   return { percu, reel };
 }
 
 /** Coureur directement devant dans mon couloir (roue à suivre), à 35 m max. */
 export function voisinDevant(w: World, r: Rider, tolLat = 1.0, portee = 35): Rider | null {
   let best: Rider | null = null;
-  for (const o of w.groupe.ordre) {
+  for (const o of w.vue.ordre) {
     if (o === r || !abrite(w, o, r, tolLat, portee)) continue;
     if (!best || o.x < best.x) best = o;
   }
@@ -109,30 +106,25 @@ export function interpreter(p: Percu): Interprete {
   const E = p.moi.reserve, X = p.moi.explosivite;
   const forme: Interprete['forme'] = E > 0.6 ? 'frais' : E > 0.35 ? 'bien' : E > E_CUIT ? 'limite' : 'cuit';
   const explosivite: Interprete['explosivite'] = X > 0.7 ? 'pleine' : X > X_MIN ? 'entamee' : 'vide';
-  const ecart: Interprete['ecart'] = p.course.tendance < -3 ? 'fond' : p.course.tendance > 3 ? 'grandit' : 'stable';
-  const menace = clamp(1 - p.course.ecart / 110, 0, 1);
-  const tend = clamp(-p.course.tendance / 10, 0, 1);
-  const pression = clamp(0.55 * menace + 0.45 * tend + (p.course.ecart < 25 ? 0.3 : 0), 0, 1);
   const d = p.course.distRestante;
   const distance: Interprete['distance'] = d < 600 ? 'sprint' : d < 2500 ? 'proche' : d < 8000 ? 'moyenne' : 'loin';
-  const groupe: Interprete['groupe'] = !p.moi.dansGroupe ? 'rompu' : p.groupe.soude ? 'soude' : 'etire';
-  const mine = p.moi.leadRecent, moy = p.groupe.moyenneRelaisAutres;
+  const position: Interprete['position'] = p.moi.decroche ? 'decroche' : p.moi.rang === 0 ? 'premier' : 'dans-la-course';
+  const mine = p.moi.leadRecent, moy = p.rivaux.moyenneRelaisAutres;
   const deficitRelais = clamp((moy - mine) / Math.max(25, moy), 0, 1);
   const excesRelais = clamp((mine - moy) / Math.max(25, mine), 0, 1);
   const partRelais: Interprete['partRelais'] = deficitRelais > 0.25 ? 'moins' : excesRelais > 0.25 ? 'plus' : 'egal';
-  const sumAll = mine + p.groupe.autres.reduce((s, o) => s + o.leadRecent, 0);
+  const sumAll = mine + p.rivaux.autres.reduce((s, o) => s + o.leadRecent, 0);
   const rasLeBol = sumAll >= 90 ? clamp((mine / sumAll - 0.45) / 0.4, 0, 1) : 0;
   const sprintFocus = clamp((p.profil.pointe - 0.45) / 0.4, 0, 1);
   const phrases: string[] = [];
   phrases.push(forme === 'frais' ? 'je me sens frais' : forme === 'bien' ? 'je me sens bien' : forme === 'limite' ? 'je suis à la limite' : 'je suis cuit');
   if (explosivite === 'vide') phrases.push("je n'ai plus d'explosivité");
-  if (ecart === 'fond') phrases.push("l'écart avec le peloton fond");
-  else if (ecart === 'grandit') phrases.push("l'écart avec le peloton grandit");
   if (partRelais === 'plus') phrases.push("j'ai plus roulé que les autres");
   else if (partRelais === 'moins') phrases.push("j'ai moins roulé que les autres");
-  if (groupe === 'rompu') phrases.push('je suis lâché');
+  if (position === 'decroche') phrases.push(`je suis décroché (${Math.round(p.moi.ecartDevant)} m)`);
+  else if (position === 'premier') phrases.push('je suis en tête de la course');
   return {
-    forme, explosivite, ecart, pression, distance, groupe, placement: p.moi.abrite > 0.12 ? 'abrite' : 'expose', partRelais,
+    forme, explosivite, distance, position, placement: p.moi.abrite > 0.12 ? 'abrite' : 'expose', partRelais,
     reserveBasse: clamp((0.45 - E) / 0.35, 0, 1), explosiviteBasse: clamp((0.6 - X) / 0.4, 0, 1),
     deficitRelais, excesRelais, rasLeBol, sprintFocus, phrases,
   };
@@ -149,8 +141,6 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
   const prof = r.profile;
   const cuit = r.E < E_CUIT;
   const sansExplosif = r.X < X_MIN;
-  const pasDeRoue = p.groupe.devantId === null;
-  
   for (const k of INTENTIONS) {
     const raisons: Raison[] = [];
     const vetos: string[] = [];
@@ -158,37 +148,35 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
     switch (k) {
       case 'relais': {
         if (cuit) vetos.push('Je suis cuit : plus de réserve pour rouler devant');
-        if (!p.moi.dansGroupe) vetos.push("Je suis lâché : il n'y a plus de groupe à mener");
-        mk(raisons, 'objectif', "Mon objectif est de gagner : l'échappée doit survivre", 1.5);
-        mk(raisons, 'ecart', it.ecart === 'fond' ? "L'écart avec le peloton fond" : 'Le peloton reste à portée', 3.5 * it.pression);
+        if (p.moi.decroche) vetos.push("Je suis décroché : j'ai déjà quelqu'un à rattraper devant moi");
+        if (p.rivaux.sprinteurDangereux)
+          mk(raisons, 'user', `Pour gagner, je dois user ${p.rivaux.sprinteurLetter} : plus la course est dure, moins il aura de jambes à la fin`, 2.5 * clamp((p.rivaux.meilleurePointe - prof.pointe) / 0.3, 0, 1) * smoothstep(1500, 6000, d));
+        if (p.moi.estEnTete) mk(raisons, 'devant', "Je suis devant : personne à qui prendre la roue", 1.5);
         mk(raisons, 'reciprocite', "Je n'ai pas roulé autant que les autres", 3.5 * it.deficitRelais);
         mk(raisons, 'reserve', 'Ma réserve est basse', -4.5 * it.reserveBasse);
         mk(raisons, 'rasLeBol', 'Je suis presque le seul à rouler depuis longtemps', -4.5 * it.rasLeBol);
         mk(raisons, 'egoisme', 'Mon tempérament est plutôt égoïste', -2.5 * (1 - prof.generosite));
-        if (!p.moi.estEnTete && p.groupe.meneurId !== null && p.groupe.meneurDepuis < 20)
-          mk(raisons, 'dejaPris', `${p.groupe.meneurLetter} vient de prendre le relais`, -4 * clamp(1 - p.groupe.meneurDepuis / 25, 0, 1));
+        if (!p.moi.estEnTete && p.rivaux.meneurId !== null && p.rivaux.meneurDepuis < 20)
+          mk(raisons, 'dejaPris', `${p.rivaux.meneurLetter} vient de prendre le relais`, -4 * clamp(1 - p.rivaux.meneurDepuis / 25, 0, 1));
         if (!p.moi.estEnTete && p.moi.rang > 1) mk(raisons, 'rang', 'Il y a du monde à dépasser avant de passer devant', -0.6 * Math.min(p.moi.rang - 1, 4));
-        if (!p.moi.estEnTete && p.groupe.quelquunPasse) mk(raisons, 'quelquunPasse', 'Quelqu’un est déjà en train de passer', -3);
+        if (!p.moi.estEnTete && p.rivaux.quelquunPasse) mk(raisons, 'quelquunPasse', 'Quelqu’un est déjà en train de passer', -3);
         break;
       }
       case 'abriter': {
         if (voisinDevant(w, r, 3.5, 40) === null) vetos.push('Personne devant moi : pas de roue à suivre');
-        if (!p.moi.dansGroupe && p.moi.ecartAuGroupe > 40) vetos.push("Je suis lâché : pas de roue à portée");
         mk(raisons, 'forces', 'Je veux garder des forces pour la fin', 1.5 + 1.5 * it.sprintFocus);
         mk(raisons, 'reserve', 'Ma réserve est basse', 4 * it.reserveBasse);
         mk(raisons, 'dejaRoule', "J'ai déjà roulé récemment", 2.5 * it.excesRelais);
-        mk(raisons, 'ralentit', "Le groupe ralentit et l'écart baisse", -3 * it.pression);
         break;
       }
       case 'rabattre': {
-        if (!p.moi.dansGroupe) vetos.push('Je ne suis plus dans le groupe');
+        if (p.moi.decroche) vetos.push('Je suis décroché : je ne mène personne');
         if (!(p.moi.estEnTete || (r.intent.kind === 'rabattre' && r.intent.phase !== 'rejoint'))) vetos.push("Je suis déjà à l'abri dans la file");
         const dureeRelais = engagement(r, 'relais');
         mk(raisons, 'duree', "J'ai fait mon temps de relais", 4 * clamp(p.moi.tempsEnTete / dureeRelais, 0, 1.2));
         mk(raisons, 'rasLeBol', 'Je suis presque le seul à rouler depuis longtemps', 4.5 * it.rasLeBol);
         mk(raisons, 'reserve', 'Ma réserve est basse', 3 * it.reserveBasse);
-        if (p.groupe.quelquunPasse) mk(raisons, 'releve', 'Quelqu’un prend le relais : je peux me rabattre', 2.5);
-        else mk(raisons, 'personne', "L'écart fond et personne ne relève", -3 * it.pression);
+        if (p.rivaux.quelquunPasse) mk(raisons, 'releve', 'Quelqu’un prend le relais : je peux me rabattre', 2.5);
         mk(raisons, 'genereux', 'Je suis généreux : je préfère rester devant', -1.5 * prof.generosite);
         break;
       }
@@ -196,23 +184,22 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         if (cuit) vetos.push('Je suis cuit : plus de réserve pour attaquer');
         if (sansExplosif) vetos.push("Je n'ai plus d'explosivité");
         const sprintD = distanceSprint(r);
-        if (!p.moi.dansGroupe && !(d <= sprintD)) vetos.push("Je suis lâché : rien à attaquer");
+        if (p.moi.decroche && !(d <= sprintD)) vetos.push("Je suis décroché : j'ai quelqu'un à rattraper avant d'attaquer");
         const fenetre = smoothstep(500, 1200, d) * (1 - smoothstep(4000, 9000, d));
         const dmax = 3000 + 4000 * prof.agressivite;
-        const frais = p.groupe.autres.length ? p.groupe.autres.filter((o) => w.riders[o.id]!.E > 0.4).length / p.groupe.autres.length : 0;
+        const frais = p.rivaux.autres.length ? p.rivaux.autres.filter((o) => w.riders[o.id]!.E > 0.4).length / p.rivaux.autres.length : 0;
         const dernier = clamp(1 - (w.t - r.stats.lastAttackT) / 600, 0, 1);
         mk(raisons, 'pointe', 'Ma pointe de vitesse ne me permet pas de gagner au sprint', 1.5 * clamp((0.6 - prof.pointe) / 0.3, 0, 1));
         mk(raisons, 'distance', 'Il reste peu de distance, mais assez pour tenter', 1.5 * fenetre);
         mk(raisons, 'agressif', 'Mon tempérament est agressif', 2.3 * prof.agressivite);
-        if (p.groupe.sprinteurDangereux)
-          mk(raisons, 'sprinteur', `${p.groupe.sprinteurLetter} est un sprinteur dangereux dans le groupe`, 1.0 * clamp((p.groupe.meilleurePointe - prof.pointe) / 0.3, 0, 1));
+        if (p.rivaux.sprinteurDangereux)
+          mk(raisons, 'sprinteur', `${p.rivaux.sprinteurLetter} est un sprinteur dangereux`, 1.0 * clamp((p.rivaux.meilleurePointe - prof.pointe) / 0.3, 0, 1));
         mk(raisons, 'explosivite', "Mon explosivité est basse", -5 * it.explosiviteBasse);
         mk(raisons, 'tropTot', 'Trop tôt : il reste trop de kilomètres', -4 * clamp((d - dmax) / dmax, 0, 1));
         mk(raisons, 'peuFrais', 'Trop de coureurs sont encore frais pour que ça passe', -2 * frais);
         mk(raisons, 'dejaEssaye', "Je viens déjà d'essayer", -4.5 * dernier);
-        mk(raisons, 'pression', "Le peloton revient : d'abord rouler", -2.5 * it.pression * (1 - prof.agressivite * 0.5));
         if (r.intent.kind === 'attaquer' && !r.intent.sprint) {
-          const chasseur = w.groupe.ordre.filter((o) => o !== r).reduce((m, o) => Math.max(m, o.x), -1e9);
+          const chasseur = w.vue.ordre.filter((o) => o !== r).reduce((m, o) => Math.max(m, o.x), -1e9);
           const avance = r.x - chasseur;
           mk(raisons, 'passe', `Je suis parti et j'ai ${Math.max(0, Math.round(avance))} m d'avance : ça passe`, 4 * clamp(avance / 25, 0, 1));
           mk(raisons, 'suivi', "On me suit : ça ne passe pas", -3 * clamp(1 - avance / 15, 0, 1));
@@ -221,15 +208,15 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         break;
       }
       case 'suivre': {
-        const a = p.groupe.attaque;
+        const a = p.rivaux.attaque;
         if (!a) vetos.push("Personne n'attaque");
         if (cuit) vetos.push('Je suis cuit : je ne peux pas suivre');
         if (sansExplosif) vetos.push("Je n'ai plus d'explosivité");
-        if (!p.moi.dansGroupe) vetos.push("Je suis lâché");
+        if (p.moi.decroche) vetos.push("Je suis décroché : je dois d'abord rattraper le coureur devant");
         mk(raisons, 'rival', `${a ? a.letter : 'Le coureur'} est un rival direct`, 2.0 * (a ? a.danger : 0.6));
         mk(raisons, 'frais', 'Je suis encore frais', 2.0 * clamp((r.E - 0.3) / 0.4, 0, 1));
         mk(raisons, 'proche', "Il reste peu de distance : je ne peux pas le laisser partir", 3.0 * (1 - smoothstep(3000, 9000, d)));
-        mk(raisons, 'tropLoin', 'Il reste trop de kilomètres : le groupe va le reprendre', -2.5 * clamp((d - 9000) / 6000, 0, 1));
+        mk(raisons, 'tropLoin', 'Il reste trop de kilomètres : les autres vont le reprendre', -2.5 * clamp((d - 9000) / 6000, 0, 1));
         mk(raisons, 'explosivite', "Mon explosivité est basse", -4 * it.explosiviteBasse);
         mk(raisons, 'cuit', 'Je suis cuit', -5 * it.reserveBasse);
         mk(raisons, 'sprint', 'Je garde mon explosivité pour le sprint', -3.0 * it.sprintFocus * (d > 1500 ? 1 : 0.3));
@@ -238,16 +225,16 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         break;
       }
       case 'gerer': {
-        if (p.moi.dansGroupe) vetos.push('Je suis encore dans le groupe');
-        mk(raisons, 'lache', 'Je ne peux plus suivre le groupe', 1.5);
+        if (!p.moi.decroche) vetos.push("Je ne suis pas décroché : j'ai quelqu'un à ma portée");
+        mk(raisons, 'lache', 'Je ne peux plus suivre le rythme', 1.5);
         mk(raisons, 'reserve', 'Ma réserve est basse', 3 * it.reserveBasse);
-        mk(raisons, 'loin', 'Le groupe est loin devant', 3.5 * clamp(p.moi.ecartAuGroupe / 300, 0, 1));
+        mk(raisons, 'loin', 'Le coureur devant est loin', 3.5 * clamp(p.moi.ecartDevant / 300, 0, 1));
         break;
       }
       case 'revenir': {
-        if (p.moi.dansGroupe) vetos.push('Je suis encore dans le groupe');
+        if (!p.moi.decroche) vetos.push("Je ne suis pas décroché : j'ai quelqu'un à ma portée");
         if (cuit) vetos.push('Je suis cuit : je ne peux pas revenir');
-        mk(raisons, 'ecart', 'Le groupe est tout proche', 4 * clamp(1 - p.moi.ecartAuGroupe / 250, 0, 1));
+        mk(raisons, 'ecart', 'Le coureur devant est tout proche', 4 * clamp(1 - p.moi.ecartDevant / 250, 0, 1));
         mk(raisons, 'arrivee', "L'arrivée est proche : je me bats jusqu'au bout", 2 * (1 - smoothstep(1500, 5000, d)));
         mk(raisons, 'sprint', 'Je garde mon explosivité pour le sprint', -1.5 * it.sprintFocus);
         mk(raisons, 'jus', "Il me reste du jus", 3 * clamp((r.E - 0.15) / 0.3, 0, 1));

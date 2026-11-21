@@ -8,7 +8,7 @@ export const INTENT_COLOR: Record<Intention, string> = {
 };
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 export const fmtT = (s: number) => `${Math.floor(s / 60)}'${String(Math.floor(s % 60)).padStart(2, '0')}"`;
-/** Classement de course : arrivés dans l'ordre d'arrivée, puis coureurs en course du plus avancé au dernier (les repris sont exclus). */
+/** Classement de course : arrivés dans l'ordre d'arrivée, puis coureurs en course du plus avancé au dernier . */
 export function classement(w: World): number[] {
   const arr = w.result.ordre.slice();
   const enCourse = w.riders.filter((r) => r.status === 'course').sort((a, b) => b.x - a.x).map((r) => r.id);
@@ -17,13 +17,15 @@ export function classement(w: World): number[] {
 export const fmtKm = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(m >= 10000 ? 1 : 2)} km` : `${Math.max(0, Math.round(m))} m`);
 
 /* ---------------- HUD ---------------- */
-export function updateHud(w: World) {
-  const g = w.groupe;
+export function updateHud(w: World, sel: number) {
+  const g = w.vue;
   const reste = Math.max(0, w.finishX - (g.ordre.length ? Math.max(...g.ordre.map((r) => r.x)) : w.finishX));
   $('sKm').textContent = fmtKm(reste);
-  $('sGap').textContent = (w.ecart >= 0 ? '+' : '−') + fmtT(Math.abs(w.ecart)) + (w.tendance < -3 ? ' ▼' : w.tendance > 3 ? ' ▲' : '');
-  $('sGapBox').classList.toggle('warn', w.ecart < 40);
-  $('sSpd').textContent = `${(g.vitesse * 3.6).toFixed(1)} km/h`;
+  const rk = classement(w), pos = rk.indexOf(sel), rs = w.riders[sel]!;
+  $('sGap').textContent = pos < 0 ? '—' : `${pos === 0 ? '1er' : pos + 1 + 'e'} / ${w.riders.length}`;
+  const dev = pos > 0 ? w.riders[rk[pos - 1]!]! : null;
+  $('sGapSub').textContent = rs.status === 'arrive' ? 'arrivé' : dev ? `à ${Math.max(0, Math.round(dev.x - rs.x))} m de ${dev.letter}` : 'en tête de la course';
+  $('sSpd').textContent = `${(rs.v * 3.6).toFixed(1)} km/h`;
   const lead = g.ordre[0];
   $('sWind').textContent = `${w.cfg.vent.toFixed(1)} m/s`;
   if (lead) {
@@ -41,7 +43,7 @@ export function updateHud(w: World) {
 let rowsBuilt = false;
 export function buildRiders(w: World, onSelect: (id: number) => void) {
   const el = $('riders');
-  el.innerHTML = `<h2><span>Les 8 coureurs · ← → pour changer</span><span class="legend"><i style="background:#2f8f4e"></i>réserve<i style="background:#e49a2e"></i>explosivité</span></h2>` +
+  el.innerHTML = `<h2><span>Les 8 coureurs · ← →</span><span class="legend"><i style="background:#2f8f4e"></i>réserve<i style="background:#e49a2e"></i>explosivité</span></h2>` +
     w.riders.map((r) => {
       const pal = PALETTES[r.id % PALETTES.length]!;
       return `<div class="rider" data-id="${r.id}"><span class="badge" style="background:${pal.j};color:${isLight(pal.j) ? '#111' : '#fff'}">${r.letter}</span>
@@ -65,7 +67,6 @@ export function updateRiders(w: World, sel: number) {
     const f = (k: string) => row.querySelector<HTMLElement>(`[data-f="${k}"]`)!;
     const chip = f('chip');
     if (r.status === 'arrive') { chip.textContent = 'Arrivé'; chip.style.setProperty('--c', '#2f8f4e'); }
-    else if (r.status === 'repris') { chip.textContent = 'Repris'; chip.style.setProperty('--c', '#555'); }
     else if (r.intent.kind) { chip.textContent = r.intent.sprint ? 'Sprint' : INTENTION_LABEL[r.intent.kind]; chip.style.setProperty('--c', INTENT_COLOR[r.intent.kind]); }
     const pos = rk.indexOf(r.id); f('rk').textContent = pos >= 0 ? (pos === 0 ? '1er' : `${pos + 1}e`) : '';
     f('e').style.width = `${Math.round(r.E * 100)}%`; f('x').style.width = `${Math.round(r.X * 100)}%`;
@@ -82,11 +83,11 @@ export function updateTrace(w: World, id: number) {
   const p = d.percu, it = d.interprete;
   const pills = [
     `réserve ${Math.round(p.moi.reserve * 100)} %`, `explosivité ${Math.round(p.moi.explosivite * 100)} %`,
-    `groupe à ${(p.groupe.vitesse * 3.6).toFixed(0)} km/h`, `écart ${Math.round(p.course.ecart)} s (${p.course.tendance >= 0 ? '+' : '−'}${Math.abs(Math.round(p.course.tendance))} s/30 s)`,
-    p.moi.dansGroupe ? (p.moi.estEnTete ? 'en tête' : `${p.moi.rang + 1}e de la file${p.moi.abrite > 0.12 ? ', abrité' : ''}`) : 'lâché',
+    `allure ${(p.rivaux.allure * 3.6).toFixed(0)} km/h`,
+    p.moi.decroche ? `décroché (${Math.round(p.moi.ecartDevant)} m)` : p.moi.rang === 0 ? 'premier' : `${p.moi.rang + 1}e${p.moi.abrite > 0.12 ? ', abrité' : ', exposé'}`,
     `vent ${p.course.ventFace >= 0 ? 'de face' : 'dans le dos'} ${Math.abs(p.course.ventFace).toFixed(1)} m/s` + (Math.abs(p.course.ventCote) > 0.5 ? `, de côté ${Math.abs(p.course.ventCote).toFixed(1)} m/s (${p.course.ventCote > 0 ? 'de gauche' : 'de droite'})` : ''),
-    ...(p.groupe.devantLetter ? [`${p.groupe.devantLetter} devant moi`] : []),
-    ...(p.groupe.attaque ? [`${p.groupe.attaque.letter} attaque`] : []),
+    ...(p.rivaux.devantLetter ? [`${p.rivaux.devantLetter} devant moi`] : []),
+    ...(p.rivaux.attaque ? [`${p.rivaux.attaque.letter} attaque`] : []),
   ];
   const max = Math.max(3, ...d.raisons.map((q) => Math.abs(q.valeur)));
   const why = d.raisons.map((q) => `<div class="why"><span class="v ${q.valeur >= 0 ? 'p' : 'n'}">${q.valeur >= 0 ? '+' : '−'}${Math.abs(q.valeur).toFixed(1)}</span><span class="t">${q.texte}<div class="bar ${q.valeur >= 0 ? 'p' : 'n'}" style="width:${Math.round((Math.abs(q.valeur) / max) * 100)}%"></div></span></div>`).join('') || '<div class="muted">aucune raison marquante</div>';
@@ -98,7 +99,7 @@ export function updateTrace(w: World, id: number) {
     <div class="who">Coureur ${r.letter}, ${ARCHETYPE_LABEL[r.archetype]}</div>
     <div class="muted">à ${fmtKm(d.distRestante)} de l'arrivée · CP ${Math.round(r.profile.cp)} W · pointe ${Math.round(r.profile.pPeak)} W · générosité ${Math.round(r.profile.generosite * 100)} % · agressivité ${Math.round(r.profile.agressivite * 100)} %</div>
     <div class="sec"><b>Perçu</b><div class="pills">${pills.map((t) => `<span>${t}</span>`).join('')}</div>
-      <div class="muted">Réel : réserve ${Math.round(d.reel.reserve * 100)} %, écart ${Math.round(d.reel.ecart)} s — perception exacte en v0.0.1 (pas de bruit).</div></div>
+      <div class="muted">Réel : réserve ${Math.round(d.reel.reserve * 100)} % — perception exacte en v0.0.1 (pas de bruit).</div></div>
     <div class="sec"><b>Interprété</b>${cap(it.phrases.join(', '))}.</div>
     <div class="sec"><b>Intention</b><span class="chip" style="--c:${INTENT_COLOR[d.intention]}">${INTENTION_LABEL[d.intention]}${sprint}</span>
       <span class="muted"> engagée jusqu'à ${d.engagementJusqua === Infinity ? 'la ligne' : fmtT(d.engagementJusqua)}</span>${why}</div>
@@ -120,16 +121,18 @@ export function pushFeed(e: SimEvent) {
   setTimeout(() => div.remove(), e.grave ? 14000 : 7000);
 }
 
-/* ---------------- bande de progression ---------------- */
-export function updateStrip(w: World) {
+/* ---------------- bande de progression : chaque coureur est un point ---------------- */
+export function updateStrip(w: World, sel: number) {
   const el = $('strip');
-  if (!el.querySelector('.track')) el.innerHTML = '<div class="track"><div class="rail"></div><div class="brk" id="brk"></div><div class="pelo" id="pelo"></div><div class="lab l0">départ</div><div class="lab l1" id="stripKm"></div></div><div class="flag">🏁</div>';
+  if (!el.querySelector('.track')) el.innerHTML = '<div class="track"><div class="rail"></div><div id="dots"></div><div class="lab l0">départ</div><div class="lab l1" id="stripKm"></div></div><div class="flag">🏁</div>';
   const L = w.finishX, pct = (x: number) => `${Math.max(0, Math.min(1, x / L)) * 100}%`;
+  const rk = classement(w);
+  $('dots').innerHTML = w.riders.map((r) => {
+    const pal = PALETTES[r.id % PALETTES.length]!, k = rk.indexOf(r.id);
+    return `<i class="dot ${r.id === sel ? 'sel' : ''}" style="left:${pct(r.x)};top:${24 + (k % 3) * 7}px;background:${pal.j}" title="${r.letter}"></i>`;
+  }).join('');
   const act = w.riders.filter((r) => r.status === 'course');
   const lead = act.length ? Math.max(...act.map((r) => r.x)) : w.finishX;
-  const brk = $('brk'); brk.style.left = pct(lead);
-  brk.innerHTML = w.riders.map((r) => r.status === 'repris' ? '' : `<i style="background:${PALETTES[r.id % PALETTES.length]!.j}"></i>`).join('');
-  const pelo = $('pelo'); pelo.style.left = pct(w.peloton.x); pelo.textContent = `peloton −${fmtT(Math.max(0, w.ecart))}`;
   $('stripKm').textContent = `${fmtKm(Math.max(0, w.finishX - lead))} à l'arrivée`;
 }
 
@@ -141,10 +144,10 @@ export function showEnd(w: World, handlers: { replay: () => void; next: () => vo
     const first = w.riders[res.ordre[0]!]!.finishTime ?? 0;
     return `<li><b>${i + 1}.</b><span class="badge" style="background:${pal.j};color:${isLight(pal.j) ? '#111' : '#fff'}">${r.letter}</span>${cap(ARCHETYPE_LABEL[r.archetype])} <span class="muted">${i ? '+' + (t - first).toFixed(1) + ' s' : fmtT(t)}</span></li>`;
   }).join('');
-  const repris = res.repris.map((id) => `${w.riders[id]!.letter} (${cap(ARCHETYPE_LABEL[w.riders[id]!.archetype])})`).join(', ');
-  box.innerHTML = `<div class="box"><h2>${res.echappeeSurvit ? `L'échappée va au bout — victoire de ${w.riders[res.vainqueur!]!.letter}` : 'Le peloton a repris l’échappée'}</h2>
-    <div class="sub">${res.echappeeSurvit ? `${res.ordre.length} coureur(s) à l'arrivée en ${fmtT(res.tFin)}, ${res.repris.length} repris.` : `Reprise à ${fmtKm(res.distanceReprise ?? 0)} de l'arrivée.`}</div>
-    ${ordre ? `<ol>${ordre}</ol>` : ''}${repris ? `<div class="muted" style="margin-bottom:12px">Repris : ${repris}</div>` : ''}
+  const win = w.riders[res.vainqueur!]!;
+  box.innerHTML = `<div class="box"><h2>Victoire de ${win.letter}, ${ARCHETYPE_LABEL[win.archetype]}</h2>
+    <div class="sub">${fmtKm(w.finishX)} en ${fmtT(win.finishTime ?? res.tFin)}.</div>
+    ${ordre ? `<ol>${ordre}</ol>` : ''}
     <div class="btns"><button id="eReplay">Rejouer cette course</button><button id="eNext">Nouvelle course</button><button id="eTrace">Télécharger la trace (JSON)</button><button id="eClose">Voir la course</button></div></div>`;
   box.hidden = false;
   document.getElementById('eReplay')!.onclick = () => { box.hidden = true; handlers.replay(); };
@@ -155,7 +158,7 @@ export function showEnd(w: World, handlers: { replay: () => void; next: () => vo
 export const hideEnd = () => { $('end').hidden = true; };
 export type { Rider };
 
-/* ---------------- mini-carte : la route et le groupe ---------------- */
+/* ---------------- mini-carte : la route et les coureurs ---------------- */
 let miniBox: { x0: number; y0: number; sc: number; ox: number; oy: number } | null = null; let miniRoad: HTMLCanvasElement | null = null; let miniFor: World | null = null;
 export function updateMini(w: World, _cam: { x: number; y: number } | null) {
   const cv = document.getElementById('mini') as HTMLCanvasElement, ctx = cv.getContext('2d')!, road = w.road;
@@ -173,6 +176,5 @@ export function updateMini(w: World, _cam: { x: number; y: number } | null) {
   }
   const b = miniBox!; ctx.drawImage(miniRoad!, 0, 0);
   const at = (s: number) => { const p = road.xy(s); return { x: b.ox + (p.x - b.x0) * b.sc, y: b.oy + (p.y - b.y0) * b.sc }; };
-  const pel = at(w.peloton.x); ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(pel.x, pel.y, 3.5, 0, Math.PI * 2); ctx.fill();
-  for (const r of w.riders) { if (r.status === 'repris') continue; const p = at(r.x); ctx.fillStyle = PALETTES[r.id % PALETTES.length]!.j; ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+  for (const r of w.riders) { const p = at(r.x); ctx.fillStyle = PALETTES[r.id % PALETTES.length]!.j; ctx.strokeStyle = '#222'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
 }

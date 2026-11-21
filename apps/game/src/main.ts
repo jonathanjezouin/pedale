@@ -33,7 +33,7 @@ let W: World; let scenery: Scenery; let views: RiderView[] = [];
 let prev: { x: number; y: number }[] = [];
 let acc = 0, timeScale = 1, paused = false, selected = 0, eventPtr = 0, ended = false, auto = true;
 const cam = { x: 0, y: 0, zoom: 1, user: 1, vx: 0, vy: 0, rot: 0 };
-let camMode: 'coureur' | 'groupe' = 'coureur', selBlend = 0;   // selBlend : transition douce quand on change de coureur
+let selBlend = 0;   // selBlend : transition douce quand on change de coureur
 const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const tiles = new Map<string, Sprite>();
 const over = () => (W.result.statut as string) === 'termine';
@@ -73,7 +73,7 @@ function newWorld(s: number) {
   document.getElementById('ventName')!.textContent = ventMode === 'fixe' ? 'Vent fixe' : 'Vent de face';
   document.getElementById('routeName')!.textContent = route === 'courbes' ? 'Route qui tourne' : 'Route droite';
   buildRiders(W, (id) => { select(id); });
-  const c = pos(W.groupe.xMoyen || 0, 0); cam.x = c.x; cam.y = c.y; cam.rot = c.h; cam.vx = cam.vy = 0;
+  const c = pos(W.vue.xMoyen || 0, 0); cam.x = c.x; cam.y = c.y; cam.rot = c.h; cam.vx = cam.vy = 0;
   const url = new URL(location.href); url.searchParams.set('seed', String(seed)); url.searchParams.set('biome', biome); url.searchParams.set('vent', ventMode); url.searchParams.set('route', route); history.replaceState(null, '', url);
   for (let i = 0; i < 2; i++) pas(W);
   eventPtr = 0;
@@ -85,7 +85,7 @@ let hudT = 0, frames = 0, lastNow = performance.now();
 
 function effectiveScale(): number {
   if (!auto) return timeScale;
-  const g = W.groupe; const lead = g.ordre.length ? Math.max(...g.ordre.map((r) => r.x)) : W.finishX; const reste = W.finishX - lead;
+  const g = W.vue; const lead = g.ordre.length ? Math.max(...g.ordre.map((r) => r.x)) : W.finishX; const reste = W.finishX - lead;
   if (reste < 700) return Math.min(timeScale, 1);
   if (reste < 2500) return Math.min(timeScale, 4);
   return timeScale;
@@ -104,7 +104,7 @@ function handleEvents() {
 
 function downloadTrace() {
   const slim = W.trace.map((d) => ({ t: d.t, coureur: d.letter, profil: d.archetype, distRestante: Math.round(d.distRestante), declencheur: d.declencheur, intention: d.intention, precedente: d.precedente,
-    raisons: d.raisons, percu: d.percu.moi && { reserve: d.percu.moi.reserve, explosivite: d.percu.moi.explosivite, ecart: d.percu.course.ecart, vitesseGroupe: d.percu.groupe.vitesse, ventFace: d.percu.course.ventFace, ventCote: d.percu.course.ventCote }, reel: d.reel, action: d.action }));
+    raisons: d.raisons, percu: d.percu.moi && { reserve: d.percu.moi.reserve, explosivite: d.percu.moi.explosivite, ecartDevant: d.percu.moi.ecartDevant, allure: d.percu.rivaux.allure, ventFace: d.percu.course.ventFace, ventCote: d.percu.course.ventCote }, reel: d.reel, action: d.action }));
   const blob = new Blob([JSON.stringify({ seed, config: W.cfg, resultat: W.result, evenements: W.events, trace: slim }, null, 1)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `pedale-trace-${seed}.json`; a.click();
 }
@@ -140,15 +140,14 @@ app.ticker.add(() => {
     if (r.status === 'course') live.push({ x: q.x, y: q.y });
   });
 
-  // caméra : fixée au-dessus du coureur sélectionné (ou du groupe), le coureur sélectionné va toujours vers le haut : c'est le monde qui tourne
+  // caméra : fixée au-dessus du coureur sélectionné le coureur sélectionné va toujours vers le haut : c'est le monde qui tourne
   const viewW = app.screen.width, viewH = app.screen.height;
-  const ref = views[selected] && W.riders[selected]!.status !== 'repris' ? views[selected]! : views.find((_, i) => W.riders[i]!.status === 'course') ?? views[0]!;
+  const ref = views[selected] && W.riders[selected]!.status === 'course' ? views[selected]! : views.find((_, i) => W.riders[i]!.status === 'course') ?? views[0]!;
   const refH = (ref as unknown as { h: number }).h ?? cam.rot;
   selBlend = Math.max(0, selBlend - dtReal);
   const kPos = (selBlend > 0 ? 7 : 50) * sc, kRot = (selBlend > 0 ? 6 : 12) * sc;     // suivi quasi rigide, proportionnel à la vitesse de simulation (ne « décolle » plus à ×4)
   cam.rot += wrapAngle(refH - cam.rot) * Math.min(1, dtReal * kRot);
   let tx = ref.qx, ty = ref.qy;
-  if (camMode === 'groupe' && live.length) { tx = live.reduce((a, b) => a + b.x, 0) / live.length; ty = live.reduce((a, b) => a + b.y, 0) / live.length; }
   const px = cam.x, py = cam.y;
   cam.x += (tx - cam.x) * Math.min(1, dtReal * kPos); cam.y += (ty - cam.y) * Math.min(1, dtReal * kPos);
   if (dtReal > 0) { cam.vx += ((cam.x - px) / dtReal - cam.vx) * 0.15; cam.vy += ((cam.y - py) / dtReal - cam.vy) * 0.15; }
@@ -198,7 +197,7 @@ app.ticker.add(() => {
     wind.moveTo(px0, py0).lineTo(px0 - ux * s.l, py0 - uy * s.l).stroke({ color: 0xffffff, width: 1.5, alpha: 0.16 });
   }
   hudT += dtReal;
-  if (hudT > 0.2) { hudT = 0; updateHud(W); updateRiders(W, selected); updateStrip(W); updateTrace(W, selected); updateMini(W, null); }
+  if (hudT > 0.2) { hudT = 0; updateHud(W, selected); updateRiders(W, selected); updateStrip(W, selected); updateTrace(W, selected); updateMini(W, null); }
 });
 
 /* ------------------------- commandes ------------------------- */
@@ -209,8 +208,6 @@ function setSpeed(v: number) {
 document.querySelectorAll<HTMLElement>('#controls button[data-sp]').forEach((b) => b.addEventListener('click', () => setSpeed(Number(b.dataset.sp))));
 document.getElementById('auto')!.addEventListener('change', (e) => { auto = (e.target as HTMLInputElement).checked; });
 function select(i: number) { if (i !== selected) { selected = i; selBlend = 0.9; } }
-const toggleCam = () => { camMode = camMode === 'coureur' ? 'groupe' : 'coureur'; document.getElementById('camName')!.textContent = camMode === 'coureur' ? 'Caméra : coureur' : 'Caméra : groupe'; };
-document.getElementById('bCam')!.onclick = toggleCam;
 const nextSeed = () => newWorld(Math.floor(Math.random() * 90000) + 1000);
 const nextBiome = () => { biome = BIOME_KEYS[(BIOME_KEYS.indexOf(biome) + 1) % BIOME_KEYS.length]!; newWorld(seed); };
 const toggleVent = () => { ventMode = ventMode === 'fixe' ? 'face' : 'fixe'; newWorld(seed); };
@@ -224,7 +221,6 @@ window.addEventListener('keydown', (e) => {
   if (e.key === ' ') { setSpeed(paused ? timeScale : 0); e.preventDefault(); }
   else if (e.key === '1') setSpeed(1); else if (e.key === '2') setSpeed(4); else if (e.key === '3') setSpeed(16); else if (e.key === '4') setSpeed(64);
   else if (e.key === 'n' || e.key === 'N') nextSeed(); else if (e.key === 'b' || e.key === 'B') nextBiome();
-  else if (e.key === 'c' || e.key === 'C') toggleCam();
   else if (e.key === 'v' || e.key === 'V') toggleVent(); else if (e.key === 'r' || e.key === 'R') toggleRoute();
   else if (e.key === 'Tab') { select((selected + 1) % W.riders.length); e.preventDefault(); }
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {            // ← coureur devant au classement, → coureur derrière

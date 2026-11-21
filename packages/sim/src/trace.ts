@@ -11,12 +11,11 @@ export function expliquer(d: Decision): string {
   const percu = [
     `réserve ${Math.round(p.moi.reserve * 100)} %`,
     `explosivité ${Math.round(p.moi.explosivite * 100)} %`,
-    `groupe à ${(p.groupe.vitesse * 3.6).toFixed(0)} km/h`,
-    `écart ${Math.round(p.course.ecart)} s (${p.course.tendance >= 0 ? '+' : '−'}${Math.abs(Math.round(p.course.tendance))} s/30 s)`,
-    p.moi.dansGroupe ? (p.moi.estEnTete ? 'en tête' : `${p.moi.rang + 1}e de la file`) : 'lâché',
+    `allure ${(p.rivaux.allure * 3.6).toFixed(0)} km/h`,
+    p.moi.decroche ? `décroché (${Math.round(p.moi.ecartDevant)} m)` : p.moi.rang === 0 ? 'premier' : `${p.moi.rang + 1}e au classement`,
   ].join(', ');
   const raisons = d.raisons.map((q) => `${signed(q.valeur)} ${q.texte}`).join(' ; ');
-  const reel = `réel : réserve ${Math.round(d.reel.reserve * 100)} %, écart ${Math.round(d.reel.ecart)} s`;
+  const reel = `réel : réserve ${Math.round(d.reel.reserve * 100)} %`;
   return [
     `[${fmtT(d.t)}] Coureur ${d.letter}, ${ARCHETYPE_LABEL[d.archetype]}, à ${km} km de l'arrivée.`,
     `Perçu : ${percu}. (${reel})`,

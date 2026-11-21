@@ -8,22 +8,15 @@ import { axeY, enLigne, LIMITE } from './placement';
 import { distanceSprint, engagement, evaluer, interpreter, percevoir, TUNE } from './mind';
 import { clamp } from './util';
 
-const URGENT = new Set(['depart', 'cuit', 'sprint', 'lache', 'rejoint', 'attaque']);
+const URGENT = new Set(['depart', 'cuit', 'sprint', 'decroche', 'recolle', 'attaque']);
 
 function evt(w: World, type: SimEvent['type'], riderId: number | null, texte: string, grave = false) {
   w.events.push({ t: w.t, type, riderId, texte, grave });
 }
 
-/* ------------------------ instantané du groupe ------------------------ */
+/* ------------------------ vue d'ensemble ------------------------ */
 function instantane(w: World) {
   const actifs = w.riders.filter((r) => r.status === 'course').sort((a, b) => b.x - a.x);
-  const groupe: Rider[] = [];
-  for (let i = 0; i < actifs.length; i++) {
-    const r = actifs[i]!;
-    if (i === 0) { groupe.push(r); continue; }
-    const seuil = r.inGroup ? 50 : 35;
-    if (actifs[i - 1]!.x - r.x <= seuil && groupe[groupe.length - 1] === actifs[i - 1]) groupe.push(r); else break;
-  }
   // vent relatif de chaque coureur : le vent est fixe dans le monde, la route tourne
   for (const r of actifs) {
     if (w.cfg.ventMode === 'face') { r.hw = w.cfg.vent; r.cw = 0; continue; }
@@ -31,32 +24,34 @@ function instantane(w: World) {
     r.hw = -(w.vent.wx * hx + w.vent.wy * hy);
     r.cw = w.vent.wx * -hy + w.vent.wy * hx;
   }
-  // allure du groupe = médiane (un suiveur qui freine un instant ne doit pas tirer l'allure vers le bas)
-  const vs = groupe.map((r) => r.v).sort((x, y) => x - y);
+  // allure = médiane des vitesses (un suiveur qui freine un instant ne doit pas tirer l'allure vers le bas)
+  const vs = actifs.map((r) => r.v).sort((x, y) => x - y);
   const vitesse = vs.length ? (vs.length % 2 ? vs[(vs.length - 1) / 2]! : (vs[vs.length / 2 - 1]! + vs[vs.length / 2]!) / 2) : 0;
-  const ref = groupe.length ? groupe : actifs;
-  const cwMoy = ref.length ? ref.reduce((s, r) => s + r.cw, 0) / ref.length : 0;
-  const alongMoy = ref.length ? ref.reduce((s, r) => s + r.v + r.hw, 0) / ref.length : 10;
+  const cwMoy = actifs.length ? actifs.reduce((s, r) => s + r.cw, 0) / actifs.length : 0;
+  const alongMoy = actifs.length ? actifs.reduce((s, r) => s + r.v + r.hw, 0) / actifs.length : 10;
   const tanB = Math.max(-1.2, Math.min(1.2, cwMoy / Math.max(2, alongMoy)));
   const coteMontant: -1 | 1 = Math.abs(cwMoy) < 0.5 ? -1 : cwMoy > 0 ? -1 : 1;   // côté du vent
   const k = Math.max(0, Math.min(1, (Math.abs(tanB) - 0.05) / 0.25));
-  const xFront = groupe.length ? groupe[0]!.x : 0;
+  const xFront = actifs.length ? actifs[0]!.x : 0;
   const xMoyen = actifs.length ? actifs.reduce((s, r) => s + r.x, 0) / actifs.length : 0;
-  w.groupe = { ordre: actifs, groupe, vitesse, meneur: null, queue: groupe[groupe.length - 1] ?? null, xMoyen, xFront, tanB, yTete: coteMontant * k * (LIMITE - 0.5), coteMontant };
+  w.vue = { ordre: actifs, vitesse, meneur: null, xMoyen, xFront, tanB, yTete: coteMontant * k * (LIMITE - 0.5), coteMontant };
   let meneur: Rider | null = null;
-  for (const r of groupe) if (enLigne(w, r) && (!meneur || r.x > meneur.x)) meneur = r;
-  w.groupe.meneur = meneur;
-  for (const r of actifs) {
-    r.wasInGroup = r.inGroup;
-    r.inGroup = groupe.includes(r);
-    if (r.wasInGroup && !r.inGroup) { evt(w, 'lache', r.id, `${r.letter} est lâché`, true); r.intent.forceEval = 'lache'; }
-    else if (!r.wasInGroup && r.inGroup) { evt(w, 'rejoint', r.id, `${r.letter} recolle au groupe`); r.intent.forceEval = 'rejoint'; }
-  }
+  for (const r of actifs) if (enLigne(w, r) && (!meneur || r.x > meneur.x)) meneur = r;
+  w.vue.meneur = meneur;
+  // décroché : à plus de 40 m du coureur juste devant (on redevient « dans la course » sous 25 m)
+  actifs.forEach((r, i) => {
+    const gap = i === 0 ? 1e9 : actifs[i - 1]!.x - r.x;
+    r.ecartDevant = gap;
+    const was = r.decroche;
+    r.decroche = i > 0 && (was ? gap > 25 : gap > 40);
+    if (!was && r.decroche) { evt(w, 'decroche', r.id, `${r.letter} est décroché (${Math.round(gap)} m)`, true); r.intent.forceEval = 'decroche'; }
+    else if (was && !r.decroche) { evt(w, 'recolle', r.id, `${r.letter} recolle`); r.intent.forceEval = 'recolle'; }
+  });
 }
 
 function suiviDeTete(w: World) {
-  const dt = w.cfg.dt, m = w.groupe.meneur;
-  for (const r of w.groupe.ordre) r.stats.leadRecent *= Math.exp(-dt / 300);
+  const dt = w.cfg.dt, m = w.vue.meneur;
+  for (const r of w.vue.ordre) r.stats.leadRecent *= Math.exp(-dt / 300);
   const cand = m ? m.id : null;
   if (cand !== w.meneurId) {
     if (cand === w.meneurCandidat) {
@@ -72,13 +67,6 @@ function suiviDeTete(w: World) {
   if (w.meneurId !== null) {
     const r = w.riders[w.meneurId]!;
     if (r.status === 'course') {
-      // le meneur ajuste le rythme de l'échappée : plus vite si l'écart fond, plus calme s'il est confortable
-      if (r.intent.kind === 'relais' && r.intent.phase === 'tete') {
-        const cible = Math.max(40, 0.75 * w.cfg.ecartInit);
-        const vMax = w.groupe.groupe.reduce((m, o) => Math.max(m, o.v), 0);
-        // l'allure visée ne suit jamais la vitesse mesurée vers le bas (spirale) ; elle ne dépasse pas ce que le groupe sait faire
-        w.vRef = clamp(w.vRef + 0.00012 * (cible - w.ecart) * dt, 0.8 * w.vRef0, Math.max(0.8 * w.vRef0, vMax + 0.6));
-      }
       r.stats.leadTime += dt; r.stats.leadRecent += dt;
       r.stats.maxLeadStreak = Math.max(r.stats.maxLeadStreak, w.t - w.meneurDepuis);
     } else { w.meneurId = null; }
@@ -120,7 +108,7 @@ function decider(w: World, r: Rider, declencheur: string) {
       }
       for (const o of w.riders) if (o !== r && o.status === 'course' && !(o.intent.kind === 'attaquer' && o.intent.sprint)) o.intent.forceEval = 'attaque';
     }
-    if (choisie === 'suivre') it.cible = percu.groupe.attaque ? percu.groupe.attaque.id : null;
+    if (choisie === 'suivre') it.cible = percu.rivaux.attaque ? percu.rivaux.attaque.id : null;
   } else if (choisie === 'attaquer' && sprintRaison) {
     it.sprint = true;
   }
@@ -139,7 +127,7 @@ function decider(w: World, r: Rider, declencheur: string) {
 }
 
 function decisions(w: World) {
-  for (const r of w.groupe.ordre) {
+  for (const r of w.vue.ordre) {
     const it = r.intent;
     // événements propres au coureur
     if (!r.cuit && r.E < E_CUIT) { r.cuit = true; evt(w, 'cuit', r.id, `${r.letter} est à bout de réserves`); it.forceEval = 'cuit'; }
@@ -158,7 +146,7 @@ function decisions(w: World) {
 /* ------------------------ physique ------------------------ */
 function physique(w: World) {
   const dt = w.cfg.dt;
-  const act = w.groupe.ordre;
+  const act = w.vue.ordre;
   for (const r of act) r.draft = aspiration(r, act);
   const cmds = act.map((r) => ({ r, c: agir(w, r) }));
   for (const { r, c } of cmds) {
@@ -204,63 +192,38 @@ function physique(w: World) {
   }
 }
 
-/* ------------------------ peloton, arrivée, reprise ------------------------ */
-function peloton(w: World) {
-  const dt = w.cfg.dt, p = w.peloton;
-  const ecart = w.ecart;
-  const accel = 1 + 0.05 * clamp((60 - ecart) / 60, 0, 1) + 0.03 * clamp((12000 - (w.finishX - p.x)) / 12000, 0, 1);
-  p.v = w.cfg.vPeloton * accel;
-  p.x += p.v * dt;
-  w.ecart = w.groupe.ordre.length ? (w.groupe.xMoyen - p.x) / p.v : w.ecart;
-  if (Math.round(w.t / dt) % Math.round(5 / dt) === 0) {
-    w.gapHistory.push({ t: w.t, gap: w.ecart });
-    const ref = w.gapHistory.find((h) => h.t >= w.t - 30 - 1e-6);
-    w.tendance = ref && w.t >= 30 ? w.ecart - ref.gap : 0;
-  }
-  const s = w.seuils;
-  const seuil = (cle: 'ecart60' | 'ecart40' | 'ecart25', v: number) => {
-    if (!s[cle] && w.ecart < v && w.t > 5) {
-      s[cle] = true; evt(w, 'ecart', null, `Le peloton n'est plus qu'à ${Math.round(w.ecart)} s`, v <= 40);
-      for (const r of w.groupe.ordre) if (!r.intent.forceEval) r.intent.forceEval = 'ecart';
-    }
-  };
-  seuil('ecart60', 60); seuil('ecart40', 40); seuil('ecart25', 25);
-}
+/* ------------------------ arrivée ------------------------ */
+const DELAI_FIN = 90;   // s après le vainqueur : la course est déclarée finie, les derniers sont classés selon leur position
 
 function arrivees(w: World) {
-  for (const r of w.groupe.ordre) {
+  for (const r of w.vue.ordre) {
     if (r.x + 0.9 >= w.finishX) {
       r.status = 'arrive'; r.finishTime = w.t + w.cfg.dt;
       w.result.ordre.push(r.id);
       if (w.result.ordre.length === 1) evt(w, 'arrivee', r.id, `${r.letter} remporte l'étape !`, true);
       else evt(w, 'arrivee', r.id, `${r.letter} franchit la ligne (${w.result.ordre.length}e)`);
-    } else if (w.peloton.x >= r.x) {
-      r.status = 'repris'; r.caughtAt = w.t;
-      w.result.repris.push(r.id);
-      evt(w, 'repris', r.id, `${r.letter} est repris par le peloton`, true);
-      w.result.distanceReprise = Math.max(0, w.finishX - r.x);
     }
   }
-  if (!w.riders.some((r) => r.status === 'course')) {
+  const enCourse = w.riders.filter((r) => r.status === 'course');
+  const tVainqueur = w.result.ordre.length ? w.riders[w.result.ordre[0]!]!.finishTime! : null;
+  if (!enCourse.length || (tVainqueur !== null && w.t - tVainqueur > DELAI_FIN)) {
+    // les retardataires sont classés selon leur position, avec un temps d'arrivée estimé
+    for (const r of enCourse.sort((a, b) => b.x - a.x)) { r.finishTime = w.t + Math.max(0, w.finishX - r.x) / Math.max(r.v, 4); w.result.ordre.push(r.id); r.status = 'arrive'; }
     w.result.statut = 'termine'; w.result.tFin = w.t;
-    w.result.echappeeSurvit = w.result.ordre.length > 0;
     w.result.vainqueur = w.result.ordre[0] ?? null;
-    if (w.result.echappeeSurvit) w.result.distanceReprise = null;
-    else evt(w, 'repris', null, "L'échappée est reprise : le peloton gagne", true);
   }
 }
 
 /** Un pas de simulation (dt fixe). */
 export function pas(w: World): void {
   if (w.result.statut === 'termine') return;
-  if (w.t === 0) evt(w, 'depart', null, `${w.riders.length} coureurs à l'avant, ${Math.round(w.ecart)} s d'avance, vent ${w.cfg.ventMode === 'face' ? 'de face' : 'fixe'} ${w.cfg.vent} m/s`);
+  if (w.t === 0) evt(w, 'depart', null, `${w.riders.length} coureurs, ${(w.finishX / 1000).toFixed(1)} km à parcourir, vent ${w.cfg.ventMode === 'face' ? 'de face' : 'fixe'} ${w.cfg.vent} m/s`);
   instantane(w);
   suiviDeTete(w);
   decisions(w);
   physique(w);
   w.t += w.cfg.dt;
   instantane(w);
-  peloton(w);
   arrivees(w);
 }
 

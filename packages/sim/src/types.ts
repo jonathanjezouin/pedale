@@ -85,11 +85,10 @@ export interface Rider {
   // état de course
   intent: IntentState;
   stats: RiderStats;
-  inGroup: boolean;
-  wasInGroup: boolean;
-  status: 'course' | 'arrive' | 'repris';
+  decroche: boolean;       // à plus de ~40 m du coureur juste devant (avec hystérésis)
+  ecartDevant: number;     // m jusqu'au coureur juste devant (1e9 si je suis premier)
+  status: 'course' | 'arrive';
   finishTime: number | null;
-  caughtAt: number | null;
   cuit: boolean;
   last: Decision | null;   // dernière décision (pour l'explication)
   draft: number;           // réduction de traînée actuelle 0..0.5
@@ -112,15 +111,16 @@ export interface Percu {
   moi: {
     reserve: number; explosivite: number; vitesse: number;
     abrite: number;            // réduction de traînée (0 = exposé)
-    rang: number;              // 0 = en tête de la file
-    estEnTete: boolean; dansGroupe: boolean;
-    ecartAuGroupe: number;     // m (si lâché)
+    rang: number;              // position de course : 0 = premier
+    estEnTete: boolean;        // personne ne m'abrite devant moi
+    decroche: boolean;         // coureur juste devant à plus de ~40 m
+    ecartDevant: number;       // m jusqu'au coureur juste devant (1e9 si premier)
     tempsEnTete: number;       // s en tête, en continu
     leadRecent: number; partRelais: number;
   };
-  groupe: {
-    vitesse: number; taille: number; soude: boolean; ecartMax: number;
-    devantId: number | null; devantLetter: string | null;
+  rivaux: {
+    allure: number;            // vitesse médiane des coureurs encore en course (m/s)
+    devantId: number | null; devantLetter: string | null;      // la roue qui m'abrite
     meneurId: number | null; meneurLetter: string | null; meneurDepuis: number;
     quelquunPasse: boolean;
     moyenneRelaisAutres: number;
@@ -128,21 +128,19 @@ export interface Percu {
     attaque: { id: number; letter: string; avance: number; depuis: number; danger: number } | null;
     autres: AutreCoureur[];
   };
-  course: { ecart: number; tendance: number; distRestante: number; distParcourue: number; ventFace: number; ventCote: number };
+  course: { distRestante: number; distParcourue: number; ventFace: number; ventCote: number };
   role: { objectif: 'gagner' };
   profil: { endurance: number; pointe: number; generosite: number; agressivite: number; experience: number };
 }
 
 /** Valeurs exactes correspondantes : la trace montre ce que le coureur croyait *et* la réalité (§4.1). */
-export interface Reel { reserve: number; explosivite: number; ecart: number; vitesseGroupe: number }
+export interface Reel { reserve: number; explosivite: number; ecartDevant: number }
 
 export interface Interprete {
   forme: 'frais' | 'bien' | 'limite' | 'cuit';
   explosivite: 'pleine' | 'entamee' | 'vide';
-  ecart: 'fond' | 'stable' | 'grandit';
-  pression: number;           // 0..1 : le peloton revient / est proche
   distance: 'sprint' | 'proche' | 'moyenne' | 'loin';
-  groupe: 'soude' | 'etire' | 'rompu';
+  position: 'premier' | 'dans-la-course' | 'decroche';
   placement: 'expose' | 'abrite';
   partRelais: 'moins' | 'egal' | 'plus';
   // quantités continues utilisées par « Vouloir »
@@ -152,7 +150,7 @@ export interface Interprete {
   excesRelais: number;        // 0..1 : j'ai plus roulé que les autres
   rasLeBol: number;           // 0..1 : je suis presque seul à rouler
   sprintFocus: number;        // 0..1 : mon atout est le sprint
-  phrases: string[];          // « je me sens frais », « l'écart fond »…
+  phrases: string[];          // « je me sens frais », « je suis décroché »…
 }
 
 /* ------------------------- Décision / trace ------------------------- */
@@ -180,43 +178,32 @@ export interface Decision {
 export interface Config {
   seed: number;
   distance: number;      // m restants au départ de la simulation
-  ecartInit: number;     // s d'avance sur le peloton
   vent: number;          // m/s : vitesse du vent
   ventMode: 'fixe' | 'face';   // fixe : direction constante dans le monde ; face : toujours de face
   ventDecalage: number;  // rad : écart de la direction du vent au cap moyen de la route
   route: 'courbes' | 'droite';
-  vPeloton: number;      // m/s : vitesse de base du peloton poursuivant
   nbCoureurs: number;
   dt: number;
   trace: 'complet' | 'changements' | 'aucun';
 }
 
-export type EventType = 'attaque' | 'sprint' | 'tete' | 'lache' | 'rejoint' | 'repris' | 'arrivee' | 'ecart' | 'depart' | 'cuit';
+export type EventType = 'attaque' | 'sprint' | 'tete' | 'decroche' | 'recolle' | 'arrivee' | 'depart' | 'cuit';
 export interface SimEvent { t: number; type: EventType; riderId: number | null; texte: string; grave: boolean }
-
-export interface Peloton { x: number; v: number }
 
 export interface Result {
   statut: 'en cours' | 'termine';
-  echappeeSurvit: boolean;
-  ordre: number[];            // arrivée, ids
+  ordre: number[];            // classement final, ids (les coureurs encore en route à la fin sont classés selon leur position)
   vainqueur: number | null;
-  repris: number[];           // ids repris
   tFin: number;
-  distanceReprise: number | null;
 }
 
 export interface World {
   t: number;
   cfg: Config;
   riders: Rider[];
-  peloton: Peloton;
   finishX: number;
   events: SimEvent[];
   trace: Decision[];
-  gapHistory: { t: number; gap: number }[];
-  ecart: number;               // s
-  tendance: number;            // s / 30 s
   meneurId: number | null;
   meneurDepuis: number;
   meneurCandidat: number | null;
@@ -224,22 +211,19 @@ export interface World {
   changementsDeTete: number;
   attaque: { id: number; t: number } | null;
   sprintLance: boolean;
-  seuils: { ecart60: boolean; ecart40: boolean; ecart25: boolean };
-  groupe: GroupSnap;
+  vue: Vue;
   result: Result;
   nextEventId: number;
-  vRef: number;                // vitesse que l'échappée cherche à tenir (m/s)
-  vRef0: number;               // sa valeur initiale
+  vInit: number;               // allure de départ (m/s)
   road: Road;
   vent: { wx: number; wy: number };   // vecteur vitesse de l'air dans le monde (m/s)
 }
 
-export interface GroupSnap {
-  ordre: Rider[];            // coureurs actifs, du plus avancé au dernier
-  groupe: Rider[];           // chaîne principale
-  vitesse: number;
-  meneur: Rider | null;
-  queue: Rider | null;
+/** Vue d'ensemble de la course à l'instant t (calculée une fois par pas) : aucun « groupe », juste le classement. */
+export interface Vue {
+  ordre: Rider[];            // coureurs encore en course, du plus avancé au dernier
+  vitesse: number;           // vitesse médiane
+  meneur: Rider | null;      // le plus avancé des coureurs dans la file
   xMoyen: number;
   xFront: number;            // abscisse du coureur le plus avancé
   tanB: number;              // tangente de l'angle du vent relatif : décalage latéral du sillage par mètre

@@ -67,8 +67,9 @@ describe('simulation v0.0.1', () => {
     for (let seed = 1; seed <= 12; seed++) {
       const w = simuler(creerMonde({ seed }));
       expect(w.result.statut).toBe('termine');
-      expect(w.result.ordre.length + w.result.repris.length).toBe(8);
-      expect(w.result.echappeeSurvit).toBe(w.result.ordre.length > 0);
+      expect(w.result.ordre).toHaveLength(8);
+      expect(new Set(w.result.ordre).size).toBe(8);
+      expect(w.result.vainqueur).toBe(w.result.ordre[0]);
     }
   });
 

@@ -18,12 +18,10 @@ export function configParDefaut(seed: number): Config {
   return {
     seed,
     distance: Math.round(range(r, 16000, 24000) / 100) * 100,
-    ecartInit: Math.round(range(r, 55, 130)),
     vent: Math.round(range(r, 2.5, 4.5) * 10) / 10,
     ventMode: 'fixe',
     ventDecalage: Math.round(range(r, -0.6, 0.6) * 100) / 100,
     route: 'courbes',
-    vPeloton: 0, // calculé dans creerMonde (dépend des coureurs)
     nbCoureurs: 8,
     dt: 0.25,
     trace: 'changements',
@@ -67,30 +65,28 @@ export function creerMonde(partiel: Partial<Config> & { seed: number }): World {
         tempsParIntention: { relais: 0, abriter: 0, rabattre: 0, attaquer: 0, suivre: 0, gerer: 0, revenir: 0 },
         maxLeadStreak: 0, leadStreak: 0, leadStreakStart: 0,
       },
-      inGroup: true, wasInGroup: true, status: 'course', finishTime: null, caughtAt: null, cuit: false, last: null, draft: 0,
+      decroche: false, ecartDevant: 1e9, status: 'course', finishTime: null, cuit: false, last: null, draft: 0,
       hw: cfg.vent, cw: 0, posture: 0, postureT: 0, vy: 0, yTf: 0,
     };
   });
   const cpMoy = riders.reduce((s, q) => s + q.profile.cp, 0) / riders.length;
   const cdaMoy = riders.reduce((s, q) => s + q.profile.cda, 0) / riders.length;
   const massMoy = riders.reduce((s, q) => s + q.profile.mass, 0) / riders.length;
-  // vitesse de référence du peloton : calée sur le vent *de face* (comparable d'un mode de vent à l'autre ; le peloton est abstrait)
+  // allure de départ : ~90 % de la puissance critique moyenne contre le vent de face (comparable d'un mode de vent à l'autre)
   const road = creerRoute(cfg.seed, -400, cfg.distance + 500, cfg.route === 'courbes');
   const phi = road.capMoyen(0, cfg.distance) + cfg.ventDecalage;
   const vent = { wx: -cfg.vent * Math.cos(phi), wy: -cfg.vent * Math.sin(phi) };
   const hwMoy = cfg.vent;
-  const vRef = vitesseSolo(0.90 * cpMoy, cdaMoy, massMoy, hwMoy);
-  if (!partiel.vPeloton) cfg.vPeloton = vRef * range(r, 0.975, 1.04);
+  const vInit = vitesseSolo(0.90 * cpMoy, cdaMoy, massMoy, hwMoy);
   // file indienne initiale : écart roue 0,6 m
-  place.forEach((rang, k) => { const q = riders[k]!; q.x = -rang * 2.4; q.v = vRef; });
-  const peloton = { x: -(cfg.ecartInit * cfg.vPeloton) - 2.4 * (riders.length - 1) / 2, v: cfg.vPeloton };
+  place.forEach((rang, k) => { const q = riders[k]!; q.x = -rang * 2.4; q.v = vInit; });
   return {
-    t: 0, cfg, riders, peloton, finishX: cfg.distance,
-    events: [], trace: [], gapHistory: [], ecart: cfg.ecartInit, tendance: 0,
+    t: 0, cfg, riders, finishX: cfg.distance,
+    events: [], trace: [],
     meneurId: null, meneurDepuis: 0, meneurCandidat: null, meneurCandidatDepuis: 0, changementsDeTete: 0,
-    attaque: null, sprintLance: false, seuils: { ecart60: false, ecart40: false, ecart25: false },
-    groupe: { ordre: [], groupe: [], vitesse: vRef, meneur: null, queue: null, xMoyen: 0, xFront: 0, tanB: 0, yTete: 0, coteMontant: -1 },
-    result: { statut: 'en cours', echappeeSurvit: false, ordre: [], vainqueur: null, repris: [], tFin: 0, distanceReprise: null },
-    nextEventId: 0, vRef, vRef0: vRef, road, vent,
+    attaque: null, sprintLance: false,
+    vue: { ordre: [], vitesse: vInit, meneur: null, xMoyen: 0, xFront: 0, tanB: 0, yTete: 0, coteMontant: -1 },
+    result: { statut: 'en cours', ordre: [], vainqueur: null, tFin: 0 },
+    nextEventId: 0, vInit, road, vent,
   };
 }
