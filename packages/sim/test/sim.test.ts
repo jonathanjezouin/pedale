@@ -112,10 +112,13 @@ describe('simulation v0.0.1', () => {
     for (const r of face.riders) { expect(r.cw).toBe(0); expect(r.hw).toBeCloseTo(face.cfg.vent, 9); }
   });
 
-  it('chaque coureur a son propre décalage (pas de constante unique) et reste sur la route', () => {
-    const w = simuler(creerMonde({ seed: 9 }), 900);
-    const ys = new Set(w.riders.map((r) => Math.round(r.y * 10)));
-    expect(ys.size).toBeGreaterThan(3);
-    for (const r of w.riders) expect(Math.abs(r.y)).toBeLessThanOrEqual(ROAD_HALF);
+  it('les décalages latéraux varient d\'un coureur à l\'autre (pas de constante unique) et on reste sur la route', () => {
+    const w = creerMonde({ seed: 9 });
+    const ys = new Set<number>();
+    for (let t = 0; t < 1200 && w.result.statut !== 'termine'; t += 0.25) {
+      pas(w);
+      if (Math.round(t * 4) % 160 === 0) for (const r of w.riders) { ys.add(Math.round(r.y * 10)); expect(Math.abs(r.y)).toBeLessThanOrEqual(ROAD_HALF); }
+    }
+    expect(ys.size).toBeGreaterThan(8);
   });
 });

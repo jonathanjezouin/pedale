@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pédale — v0.0.1</title>
+<title>Pédale — v0.0.2</title>
 <style>
   :root { --ink:#1f2328; --paper:#fbf7ea; --paper2:#f1ead2; --line:#d9cfae; --accent:#e4572e; --good:#2f8f4e; --bad:#c2392f; --mute:#6d6a5c; }
   * { box-sizing: border-box; }
@@ -46,7 +46,7 @@
   #riders { padding:10px 10px 4px; border-bottom:2px solid var(--line); }
   #riders h2, #trace h2 { margin:0 0 6px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--mute); display:flex; justify-content:space-between; }
   .legend i { display:inline-block; width:9px; height:9px; border-radius:2px; margin:0 3px 0 8px; vertical-align:-1px; }
-  .rider { display:grid; grid-template-columns:30px 1fr 70px; gap:8px; align-items:center; padding:5px 6px; border-radius:7px; cursor:pointer; border:2px solid transparent; }
+  .rider { display:grid; grid-template-columns:30px 1fr 122px; gap:8px; align-items:center; padding:5px 6px; border-radius:7px; cursor:pointer; border:2px solid transparent; }
   .rider:hover { background:var(--paper2); } .rider.sel { border-color:var(--ink); background:#fff; }
   .rider.out { opacity:.45; }
   .badge { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; font-weight:800; font-size:14px; color:#111; border:2px solid #222; }
@@ -57,7 +57,7 @@
   .bars i { display:block; height:5px; border-radius:3px; background:#e4dcc0; position:relative; overflow:hidden; }
   .bars i b { position:absolute; inset:0 auto 0 0; border-radius:3px; }
   .bars .e b { background:#2f8f4e; } .bars .x b { background:#e49a2e; }
-  .rider .num { text-align:right; font-size:11px; color:var(--mute); line-height:1.3; font-variant-numeric:tabular-nums; }
+  .rider .num { white-space:nowrap; text-align:right; font-size:11px; color:var(--mute); line-height:1.3; font-variant-numeric:tabular-nums; }
   .rider .num b { color:var(--ink); font-size:13px; }
   #trace { padding:10px 12px 12px; overflow:auto; flex:1; font-size:12.5px; line-height:1.45; }
   #trace .who { font-size:15px; font-weight:800; margin-bottom:4px; }
@@ -85,7 +85,7 @@
 <body>
 <div id="stage"></div>
 <div id="hud">
-  <h1 class="card">Pédale · v0.0.1 · huit coureurs sur le plat</h1>
+  <h1 class="card">Pédale · v0.0.2 · huit coureurs sur le plat</h1>
   <div class="stats">
     <div class="stat card"><small>Distance restante</small><b id="sKm">—</b></div>
     <div class="stat card"><small>Position</small><b id="sGap">—</b><small id="sGapSub" style="margin-top:2px;text-transform:none;letter-spacing:0"></small></div>
@@ -105,6 +105,7 @@
     <button data-sp="16"><kbd>3</kbd>×16</button>
     <button data-sp="64"><kbd>4</kbd>×64</button>
     <label class="chk"><input type="checkbox" id="auto" checked> Ralentir sur les événements</label>
+    <label class="chk" title="Affiche le sillage de chaque coureur (touche A)"><kbd>A</kbd>Aspiration <input type="range" id="aspi" min="0" max="100" value="0" style="vertical-align:middle;width:90px"></label>
     <button id="bNew"><kbd>N</kbd>Nouvelle course</button>
     <button id="bBiome"><kbd>B</kbd><span id="biomeName">Prairie</span></button>
     <button id="bVent"><kbd>V</kbd><span id="ventName">Vent fixe</span></button>

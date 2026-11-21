@@ -29,8 +29,12 @@ function couloirLibre(w: World, r: Rider, cote: 1 | -1): boolean {
 /** Suivre une roue : vitesse cible = celle de la roue + correction d'écart. */
 function suivre(roue: Rider, r: Rider, limite: number, aMax = 1.2): number {
   const gap = roue.x - r.x - RIDER_LEN;
-  const vDes = clamp(roue.v + 0.5 * (gap - 0.8), roue.v - 3, roue.v + 3);
-  return Math.min(limite, puissanceVers(vDes, r.v, r, aMax, FREINAGE_MAX));      // un suiveur peut freiner pour ne pas toucher la roue
+  // empressement : on vise une roue à ~0,5 m ; plus l'écart est grand, plus on rattrape vite (l'aspiration vaut jusqu'à ~38 % de puissance)
+  const vDes = clamp(roue.v + 1.1 * (gap - 0.5), roue.v - 3, roue.v + 4);
+  // l'abri a de la valeur : pour reprendre la roue on accepte de dépasser un peu sa puissance soutenable (jusqu'à +22 %)
+  const urgence = clamp((gap - 1.0) / 4, 0, 1);
+  const lim = Math.min(capExplosif(r), limite * (1 + 0.22 * urgence));
+  return Math.min(lim, puissanceVers(vDes, r.v, r, aMax * 1.5, FREINAGE_MAX));      // un suiveur peut freiner pour ne pas toucher la roue
 }
 
 /** Position latérale dans le sillage de la roue qu'on suit (dérive avec le vent), avec l'habitude personnelle. */
@@ -45,7 +49,7 @@ export function agir(w: World, r: Rider): Commande {
       const rivaux = autres(w, r);
       const xMax = rivaux.reduce((m, o) => Math.max(m, o.x), -1e9);
       // le coureur déjà en tête n'a personne à doubler ; un passeur doit avoir dépassé tous les autres de 3 m
-      if (it.phase !== 'tete' && (rivaux.length === 0 || r.x > xMax + 3.0 || (enLigne(w, r) && r.x > xMax))) {
+      if (it.phase !== 'tete' && (rivaux.length === 0 || r.x > xMax + 2.4 || (enLigne(w, r) && r.x > xMax))) {
         it.phase = 'tete'; it.phaseSince = w.t;
         // en tête on tient l'allure à laquelle les autres roulaient (médiane de leurs vitesses), dans la limite de ses moyens
         const vs = rivaux.map((o) => o.v).sort((p, q) => p - q);
@@ -60,7 +64,7 @@ export function agir(w: World, r: Rider): Commande {
       }
       it.phase = 'passe';
       const vMeneur = g.meneur ? g.meneur.v : g.vitesse;
-      return { yT: yMontant(w, r), p: Math.min(cap * 1.05, puissanceVers(vMeneur + 1.1, r.v, r, 1.3)) };
+      return { yT: yMontant(w, r), p: Math.min(cap * 1.05, puissanceVers(vMeneur + 0.9, r.v, r, 1.3)) };
     }
     case 'rabattre': {
       const file = autres(w, r).filter((o) => enLigne(w, o));

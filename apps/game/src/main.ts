@@ -1,10 +1,10 @@
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
-import { creerMonde, pas } from '@pedale/sim';
+import { aspirationValeur, creerMonde, pas, RIDER_LEN, tanVent } from '@pedale/sim';
 import type { World } from '@pedale/sim';
 import { BIOMES, BIOME_KEYS, PX_PER_M, Scenery, TILE } from './scenery';
 import type { BiomeKey } from './scenery';
 import { FRAMES, clearRiderTextures, riderTexture } from './riders';
-import { INTENT_COLOR, classement, buildRiders, hideEnd, pushFeed, showEnd, updateHud, updateMini, updateRiders, updateStrip, updateTrace } from './ui';
+import { classement, buildRiders, hideEnd, pushFeed, showEnd, updateHud, updateMini, updateRiders, updateStrip, updateTrace } from './ui';
 
 const SIM_DT = 0.25;
 const TAU = Math.PI * 2;
@@ -21,8 +21,10 @@ stageEl.appendChild(app.canvas);
 
 /* ------------------------- scène ------------------------- */
 const world = new Container(); app.stage.addChild(world);
-const tileLayer = new Container(); const ridersLayer = new Container(); const overlay = new Container();
-world.addChild(tileLayer, ridersLayer, overlay);
+const tileLayer = new Container(); const aspiLayer = new Container(); const ridersLayer = new Container(); const overlay = new Container();
+world.addChild(tileLayer, aspiLayer, ridersLayer, overlay);
+const aspiGfx = new Graphics(); aspiLayer.addChild(aspiGfx);
+let aspiOpacity = 0;                                  // curseur « Aspiration » : 0 = masquée
 const wind = new Graphics(); app.stage.addChild(wind);
 const labelLayer = new Container(); app.stage.addChild(labelLayer);      // libellés en repère écran (toujours droits)
 const ring = new Graphics(); overlay.addChild(ring);
@@ -136,6 +138,7 @@ app.ticker.add(() => {
     v.sprite.rotation = q.h + Math.atan2(v.vy, Math.max(r.v, 2)) * 1.6 + sw * 0.07;
     v.sprite.texture = riderTexture(r.id, v.pose, Math.floor(((v.phase % TAU) / TAU) * FRAMES) % FRAMES);
     v.sprite.visible = r.status === 'course' || r.status === 'arrive';
+    (v as unknown as { s: number; d: number }).s = s; (v as unknown as { s: number; d: number }).d = d;
     v.qx = q.x; v.qy = q.y; (v as unknown as { h: number }).h = q.h;
     if (r.status === 'course') live.push({ x: q.x, y: q.y });
   });
@@ -161,9 +164,9 @@ app.ticker.add(() => {
   // libellés en repère écran (lettre + pastille d'intention)
   W.riders.forEach((r, i) => {
     const v = views[i]!, sp = toScreen(v.qx, v.qy);
-    v.label.position.set(sp.x - 2, sp.y - 40); v.label.visible = v.sprite.visible; v.label.alpha = r.status === 'arrive' ? 0.5 : 1;
+    // ni lettres ni pastilles sur la course : seule la lettre du coureur sélectionné reste affichée
+    v.label.position.set(sp.x - 2, sp.y - 40); v.label.visible = v.sprite.visible && i === selected; v.label.alpha = 1;
     v.dot.clear();
-    if (r.intent.kind && v.sprite.visible) v.dot.circle(sp.x + 14, sp.y - 40, 5.5).fill(parseInt(INTENT_COLOR[r.intent.kind].slice(1), 16)).stroke({ color: 0x111111, width: 1.5 });
   });
 
   // tuiles visibles : disque couvrant l'écran (le monde est tourné), 2 nouvelles max par image ; tout au démarrage
@@ -175,6 +178,22 @@ app.ticker.add(() => {
   wanted.sort((a, b) => a[2] - b[2]);
   for (const [tx2, ty2] of wanted) { if (budget <= 0) break; if (ensureTile(tx2, ty2)) budget--; }
   for (const [k, s] of tiles) { const [a, b] = k.split(',').map(Number) as [number, number]; if (a < tx0 - 2 || a > tx1 + 2 || b < ty0 - 2 || b > ty1 + 2) { s.texture.destroy(true); s.destroy(); tiles.delete(k); } }
+
+  // aspiration : le sillage de chaque coureur (intensité = réduction de traînée qu'y trouverait un suiveur), dérivant avec le vent de côté
+  aspiGfx.clear();
+  if (aspiOpacity > 0.01) {
+    const gaps = [0.2, 0.7, 1.4, 2.3, 3.4, 4.8, 6.5, 8.5, 11, 14];
+    W.riders.forEach((r, i) => {
+      if (r.status !== 'course') return;
+      const v = views[i]! as unknown as { s: number; d: number }, tb = tanVent(r);
+      let prevP: { x: number; y: number } | null = null;
+      gaps.forEach((g, k) => {
+        const p = pos(v.s - RIDER_LEN - g + 0.0, v.d + g * tb), a = aspirationValeur(g, 0) / 0.45;
+        if (prevP && k > 0) aspiGfx.moveTo(prevP.x, prevP.y).lineTo(p.x, p.y).stroke({ width: 30 + 20 * a, color: 0x14c8b4, alpha: aspiOpacity * (0.15 + 0.85 * a) * 0.55, cap: 'round' });
+        prevP = p;
+      });
+    });
+  }
 
   // anneau du coureur sélectionné
   const sv = views[selected]!; ring.clear();
@@ -212,6 +231,8 @@ const nextSeed = () => newWorld(Math.floor(Math.random() * 90000) + 1000);
 const nextBiome = () => { biome = BIOME_KEYS[(BIOME_KEYS.indexOf(biome) + 1) % BIOME_KEYS.length]!; newWorld(seed); };
 const toggleVent = () => { ventMode = ventMode === 'fixe' ? 'face' : 'fixe'; newWorld(seed); };
 const toggleRoute = () => { route = route === 'courbes' ? 'droite' : 'courbes'; newWorld(seed); };
+document.getElementById('aspi')!.addEventListener('input', (e) => { aspiOpacity = Number((e.target as HTMLInputElement).value) / 100; });
+const toggleAspi = () => { const el = document.getElementById('aspi') as HTMLInputElement; el.value = aspiOpacity > 0 ? '0' : '80'; aspiOpacity = Number(el.value) / 100; };
 document.getElementById('bNew')!.onclick = nextSeed;
 document.getElementById('bBiome')!.onclick = nextBiome;
 document.getElementById('bVent')!.onclick = toggleVent;
@@ -221,6 +242,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === ' ') { setSpeed(paused ? timeScale : 0); e.preventDefault(); }
   else if (e.key === '1') setSpeed(1); else if (e.key === '2') setSpeed(4); else if (e.key === '3') setSpeed(16); else if (e.key === '4') setSpeed(64);
   else if (e.key === 'n' || e.key === 'N') nextSeed(); else if (e.key === 'b' || e.key === 'B') nextBiome();
+  else if (e.key === 'a' || e.key === 'A') toggleAspi();
   else if (e.key === 'v' || e.key === 'V') toggleVent(); else if (e.key === 'r' || e.key === 'R') toggleRoute();
   else if (e.key === 'Tab') { select((selected + 1) % W.riders.length); e.preventDefault(); }
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {            // ← coureur devant au classement, → coureur derrière

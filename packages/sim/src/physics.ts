@@ -60,6 +60,16 @@ export function vitesseSolo(power: number, cda: number, mass: number, vent: numb
 /** Tangente de l'angle du vent relatif vu par un coureur (le sillage dérive du côté où va l'air). */
 export const tanVent = (r: Rider) => clamp(r.cw / Math.max(2, r.v + r.hw), -1.2, 1.2);
 
+/** Aspiration : paramètres du modèle (une seule source de vérité, utilisée aussi par l'affichage).
+ *  Réduction de traînée d'un coureur placé derrière un autre : base · e^(−écart/longueur) · (1 − décalage/largeur).
+ *  À 0,5 m ≈ 38 %, à 1 m ≈ 32 %, à 3 m ≈ 16 %, à 6 m ≈ 6 %. Plafond 48 % (deux coureurs devant). */
+export const ASPIRATION = { base: 0.45, longueur: 3.0, largeur: 0.9, plafond: 0.48 };
+/** Réduction de traînée apportée par UN coureur devant : `ecart` = distance entre sa roue arrière et ma roue avant (m), `dy` = décalage latéral par rapport à son sillage (m). */
+export function aspirationValeur(ecart: number, dy: number): number {
+  if (dy >= ASPIRATION.largeur || ecart > 14) return 0;
+  return ASPIRATION.base * Math.exp(-Math.max(ecart, 0) / ASPIRATION.longueur) * (1 - dy / ASPIRATION.largeur);
+}
+
 /** Réduction de traînée due aux coureurs devant. Le sillage d'un coureur dérive latéralement avec le vent de côté :
  *  à `gap` mètres derrière lui il est centré à o.y + gap·tanβ. De face : tout droit derrière ; de côté : en éventail. */
 export function aspiration(self: Rider, others: Rider[]): number {
@@ -70,11 +80,11 @@ export function aspiration(self: Rider, others: Rider[]): number {
     const gap = o.x - self.x - RIDER_LEN;
     if (o.x <= self.x || gap > 14) continue;
     const dy = Math.abs(self.y - (o.y + Math.max(gap, 0) * tb));
-    if (dy >= 0.9) continue;
-    const d = 0.40 * Math.exp(-Math.max(gap, 0) / 3.5) * (1 - dy / 0.9);
+    const d = aspirationValeur(gap, dy);
+    if (d <= 0) continue;
     if (d > d1) { d2 = d1; d1 = d; } else if (d > d2) d2 = d;
   }
-  return Math.min(0.48, d1 + 0.25 * d2);
+  return Math.min(ASPIRATION.plafond, d1 + 0.25 * d2);
 }
 
 /** Mise à jour des réserves (Skiba simplifié pour l'explosivité, usure cubique pour l'endurance). */

@@ -49,7 +49,7 @@ export function buildRiders(w: World, onSelect: (id: number) => void) {
       return `<div class="rider" data-id="${r.id}"><span class="badge" style="background:${pal.j};color:${isLight(pal.j) ? '#111' : '#fff'}">${r.letter}</span>
         <div><div class="l1"><b>${cap(ARCHETYPE_LABEL[r.archetype])}</b><span class="chip" data-f="chip"></span><span class="rk" data-f="rk"></span></div>
         <div class="bars"><i class="e"><b data-f="e"></b></i><i class="x"><b data-f="x"></b></i></div></div>
-        <div class="num"><b data-f="v"></b><br><span data-f="p"></span></div></div>`;
+        <div class="num"><b data-f="v"></b><br><span data-f="p"></span> · <span data-f="a"></span></div></div>`;
     }).join('');
   el.querySelectorAll<HTMLElement>('.rider').forEach((n) => n.addEventListener('click', () => onSelect(Number(n.dataset.id))));
   rowsBuilt = true;
@@ -70,7 +70,7 @@ export function updateRiders(w: World, sel: number) {
     else if (r.intent.kind) { chip.textContent = r.intent.sprint ? 'Sprint' : INTENTION_LABEL[r.intent.kind]; chip.style.setProperty('--c', INTENT_COLOR[r.intent.kind]); }
     const pos = rk.indexOf(r.id); f('rk').textContent = pos >= 0 ? (pos === 0 ? '1er' : `${pos + 1}e`) : '';
     f('e').style.width = `${Math.round(r.E * 100)}%`; f('x').style.width = `${Math.round(r.X * 100)}%`;
-    f('v').textContent = `${(r.v * 3.6).toFixed(0)} km/h`; f('p').textContent = `${Math.round(r.p)} W`;
+    f('v').textContent = `${(r.v * 3.6).toFixed(0)} km/h`; f('p').textContent = `${Math.round(r.p)} W`; f('a').textContent = `abri ${Math.round(r.draft * 100)} %`;
   });
 }
 
