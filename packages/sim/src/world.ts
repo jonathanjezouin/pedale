@@ -2,7 +2,7 @@ import type { Decision, Intention, Rider, SimEvent, World } from './types';
 import { INTENTIONS, INTENTION_LABEL } from './types';
 import { agir, decrireAction } from './action';
 import {
-  aspiration, capExplosif, consommer, E_CUIT, MAX_LAT_SPEED, resistance, RIDER_LEN, capSoutenu,
+  aspiration, capExplosif, consommer, E_CUIT, MAX_LAT_SPEED, LAT_ACCEL, LAT_TAU, FREINAGE_MAX, resistance, RIDER_LEN, capSoutenu,
 } from './physics';
 import { axeY, enLigne, LIMITE } from './placement';
 import { distanceSprint, engagement, evaluer, interpreter, percevoir, TUNE } from './mind';
@@ -31,7 +31,9 @@ function instantane(w: World) {
     r.hw = -(w.vent.wx * hx + w.vent.wy * hy);
     r.cw = w.vent.wx * -hy + w.vent.wy * hx;
   }
-  const vitesse = groupe.length ? groupe.reduce((s, r) => s + r.v, 0) / groupe.length : 0;
+  // allure du groupe = médiane (un suiveur qui freine un instant ne doit pas tirer l'allure vers le bas)
+  const vs = groupe.map((r) => r.v).sort((x, y) => x - y);
+  const vitesse = vs.length ? (vs.length % 2 ? vs[(vs.length - 1) / 2]! : (vs[vs.length / 2 - 1]! + vs[vs.length / 2]!) / 2) : 0;
   const ref = groupe.length ? groupe : actifs;
   const cwMoy = ref.length ? ref.reduce((s, r) => s + r.cw, 0) / ref.length : 0;
   const alongMoy = ref.length ? ref.reduce((s, r) => s + r.v + r.hw, 0) / ref.length : 10;
@@ -73,7 +75,9 @@ function suiviDeTete(w: World) {
       // le meneur ajuste le rythme de l'échappée : plus vite si l'écart fond, plus calme s'il est confortable
       if (r.intent.kind === 'relais' && r.intent.phase === 'tete') {
         const cible = Math.max(40, 0.75 * w.cfg.ecartInit);
-        w.vRef = clamp(w.vRef + 0.00012 * (cible - w.ecart) * dt, w.groupe.vitesse - 0.6, w.groupe.vitesse + 0.6);
+        const vMax = w.groupe.groupe.reduce((m, o) => Math.max(m, o.v), 0);
+        // l'allure visée ne suit jamais la vitesse mesurée vers le bas (spirale) ; elle ne dépasse pas ce que le groupe sait faire
+        w.vRef = clamp(w.vRef + 0.00012 * (cible - w.ecart) * dt, 0.8 * w.vRef0, Math.max(0.8 * w.vRef0, vMax + 0.6));
       }
       r.stats.leadTime += dt; r.stats.leadRecent += dt;
       r.stats.maxLeadStreak = Math.max(r.stats.maxLeadStreak, w.t - w.meneurDepuis);
@@ -158,9 +162,11 @@ function physique(w: World) {
   for (const r of act) r.draft = aspiration(r, act);
   const cmds = act.map((r) => ({ r, c: agir(w, r) }));
   for (const { r, c } of cmds) {
-    const p = clamp(c.p, 0, capExplosif(r));
+    const pFrein = -r.profile.mass * Math.max(r.v, 2) * FREINAGE_MAX;
+    const pRaw = clamp(c.p, pFrein, capExplosif(r));     // < 0 : freinage
+    const p = Math.max(0, pRaw);
     // bilan de forces : m·a = P/v − F
-    const acc = (p / Math.max(r.v, 2) - resistance(r.v, r.draft, r)) / r.profile.mass;
+    const acc = (pRaw / Math.max(r.v, 2) - resistance(r.v, r.draft, r)) / r.profile.mass;
     r.v = Math.max(0, r.v + acc * dt);
     // vitesse sol → avancement le long de la ligne centrale : à l'intérieur d'un virage on parcourt moins de distance
     r.x += (r.v * dt) / Math.max(0.5, 1 - w.road.courbure(r.x) * r.y);
@@ -174,12 +180,15 @@ function physique(w: World) {
     consommer(r, p, dt);
     r.stats.tempsParIntention[r.intent.kind ?? 'abriter'] += dt;
     // déplacement latéral (on n'entre dans la file que s'il y a de la place)
-    const dy = clamp(c.yT - r.y, -MAX_LAT_SPEED * dt, MAX_LAT_SPEED * dt);
-    const ny = Math.max(-LIMITE, Math.min(LIMITE, r.y + dy));
+    // trajectoire lissée : consigne filtrée, vitesse latérale bornée, accélération latérale bornée
+    r.yTf += (c.yT - r.yTf) * (1 - Math.exp(-dt / LAT_TAU));
+    const vyDes = clamp((r.yTf - r.y) / 0.9, -MAX_LAT_SPEED, MAX_LAT_SPEED);
+    r.vy += clamp(vyDes - r.vy, -LAT_ACCEL * dt, LAT_ACCEL * dt);
+    const ny = Math.max(-LIMITE, Math.min(LIMITE, r.y + r.vy * dt));
     // on n'entre dans la file que s'il y a de la place
     if (!enLigne(w, r, 0.9) && Math.abs(ny - axeY(w, r.x)) < 0.9) {
       const occupe = act.some((o) => o !== r && enLigne(w, o, 0.9) && Math.abs(o.x - r.x) < RIDER_LEN + 0.4);
-      if (!occupe) r.y = ny;
+      if (!occupe) r.y = ny; else r.vy = 0;
     } else r.y = ny;
   }
   // pas de chevauchement : on ne passe pas à travers la roue de devant
@@ -188,7 +197,9 @@ function physique(w: World) {
     const b = tri[i]!;
     for (let j = 0; j < i; j++) {
       const a = tri[j]!;
-      if (Math.abs(a.y - b.y) < 0.8 && a.x > b.x - 0.01 && a.x - b.x < RIDER_LEN + 0.15) { b.x = a.x - (RIDER_LEN + 0.15); b.v = Math.min(b.v, a.v); }
+      const recouvre = RIDER_LEN + 0.15 - (a.x - b.x);
+      // contact doux : on ne « téléporte » plus le coureur de derrière, on le repousse progressivement et on freine
+      if (Math.abs(a.y - b.y) < 0.55 && a.x > b.x - 0.01 && recouvre > 0) { b.x -= Math.min(recouvre, 0.35) * 0.5; b.v = Math.min(b.v, a.v - 0.2 * recouvre); }
     }
   }
 }

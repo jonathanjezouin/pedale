@@ -97,6 +97,8 @@ export interface Rider {
   cw: number;              // vent de côté (m/s, > 0 = vient de la gauche, pousse vers la droite)
   posture: 0 | 1 | 2 | 3;  // 0 sur les cocottes, 1 en bas du cintre, 2 en danseuse, 3 écrasé de fatigue
   postureT: number;
+  vy: number;              // vitesse latérale (m/s) : les changements de position sont lissés
+  yTf: number;             // cible latérale filtrée
 }
 
 /* ------------------------- Perception / interprétation ------------------------- */
@@ -227,6 +229,7 @@ export interface World {
   result: Result;
   nextEventId: number;
   vRef: number;                // vitesse que l'échappée cherche à tenir (m/s)
+  vRef0: number;               // sa valeur initiale
   road: Road;
   vent: { wx: number; wy: number };   // vecteur vitesse de l'air dans le monde (m/s)
 }

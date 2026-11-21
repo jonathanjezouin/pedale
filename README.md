@@ -26,7 +26,7 @@ npm run electron     # build + fenêtre Electron
 npm run dist         # installeur Windows (electron-builder) — à lancer sous Windows
 ```
 
-Raccourcis : `Espace` pause · `1-4` vitesse ×1/×4/×16/×64 · `Tab` coureur suivant · `N` nouvelle course · `B` biome · `V` vent fixe / de face · `R` route qui tourne / droite · molette = zoom.
+Raccourcis : `Espace` pause · `1-4` vitesse ×1/×4/×16/×64 · `Tab` coureur suivant · `N` nouvelle course · `B` biome · `C` caméra coureur / groupe · `V` vent fixe / de face · `R` route qui tourne / droite · molette = zoom.
 Paramètres d'URL : `?seed=1234&biome=desert&vent=face&route=droite`.
 
 ### Organisation

@@ -4,7 +4,7 @@
    Le placement est continu sur toute la largeur de la route ; la file suit l'axe défini dans placement.ts.
    ===================================================================== */
 import type { Intention, Rider, World } from './types';
-import { capExplosif, capSoutenu, puissanceVers, RIDER_LEN } from './physics';
+import { capExplosif, capSoutenu, FREINAGE_MAX, puissanceVers, RIDER_LEN } from './physics';
 import { voisinDevant } from './mind';
 import { axeY, decalage, enLigne, limiter, placeDansLaFile, roueEnLigne, yDescendant, yMontant } from './placement';
 import { clamp } from './util';
@@ -27,7 +27,7 @@ function couloirLibre(w: World, r: Rider, cote: 1 | -1): boolean {
 function suivre(roue: Rider, r: Rider, limite: number, aMax = 1.2): number {
   const gap = roue.x - r.x - RIDER_LEN;
   const vDes = clamp(roue.v + 0.5 * (gap - 0.8), roue.v - 3, roue.v + 3);
-  return Math.min(limite, puissanceVers(vDes, r.v, r, aMax));
+  return Math.min(limite, puissanceVers(vDes, r.v, r, aMax, FREINAGE_MAX));      // un suiveur peut freiner pour ne pas toucher la roue
 }
 
 /** Position latérale dans le sillage de la roue qu'on suit (dérive avec le vent), avec l'habitude personnelle. */
@@ -42,9 +42,11 @@ export function agir(w: World, r: Rider): Commande {
       const autres = autresDuGroupe(w, r);
       const xMax = autres.reduce((m, o) => Math.max(m, o.x), -1e9);
       // le coureur déjà en tête de file n'a personne à doubler ; un passeur doit avoir dépassé le groupe de 3 m
-      if (it.phase !== 'tete' && (autres.length === 0 || r.x > xMax + 3.0 || (enLigne(w, r) && r.x > xMax))) { it.phase = 'tete'; it.phaseSince = w.t; }
+      if (it.phase !== 'tete' && (autres.length === 0 || r.x > xMax + 3.0 || (enLigne(w, r) && r.x > xMax))) { it.phase = 'tete'; it.phaseSince = w.t; it.vHold = Math.max(r.v, w.vRef); }
       if (it.phase === 'tete') {
-        it.vHold = w.vRef;
+        // on garde la vitesse du dépassement puis on la relâche progressivement vers l'allure de l'échappée (pas de coup de frein pour ceux derrière)
+        // on garde la vitesse du dépassement puis on la relâche progressivement vers l'allure de l'échappée
+        it.vHold += clamp(w.vRef - it.vHold, -0.35 * w.cfg.dt, 0.35 * w.cfg.dt);
         return { yT: limiter(g.yTete + r.profile.lateral * 0.3), p: Math.min(cap * 1.0, puissanceVers(it.vHold, r.v, r, 1.0)) };
       }
       it.phase = 'passe';
@@ -57,7 +59,9 @@ export function agir(w: World, r: Rider): Commande {
       if (it.phase === 'decale' && file.length && r.x <= queueX - 3.0) { it.phase = 'rejoint'; it.phaseSince = w.t; it.forceEval = 'rejoint'; }
       if (it.phase === 'rejoint') return { yT: placeDansLaFile(w, r), p: Math.min(cap, puissanceVers(g.vitesse - 0.4, r.v, r)) };
       it.phase = 'decale';
-      return { yT: yDescendant(w, r), p: Math.min(cap, puissanceVers(g.vitesse - 1.0, r.v, r)) };
+      // tant qu'il n'est pas sorti de la file, il garde l'allure (sinon toute la file derrière freine avec lui) ; puis il se laisse glisser
+      const libre = !enLigne(w, r, 1.1);
+      return { yT: yDescendant(w, r), p: Math.min(cap, puissanceVers(libre ? g.vitesse - 1.0 : g.vitesse, r.v, r)) };
     }
     case 'attaquer': {
       if (it.sprint) {
@@ -80,7 +84,7 @@ export function agir(w: World, r: Rider): Commande {
       if (a && a.status === 'course') {
         const gap = a.x - r.x - RIDER_LEN;
         const vDes = clamp(a.v + 0.4 * (gap - 1.0), a.v - 3, a.v + 1.5);
-        return { yT: yAbrite(w, r, a), p: Math.min(capExplosif(r), puissanceVers(vDes, r.v, r, 1.4)) };
+        return { yT: yAbrite(w, r, a), p: Math.min(capExplosif(r), puissanceVers(vDes, r.v, r, 1.4, FREINAGE_MAX)) };
       }
       return defaut(w, r);
     }

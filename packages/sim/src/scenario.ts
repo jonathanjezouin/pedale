@@ -68,7 +68,7 @@ export function creerMonde(partiel: Partial<Config> & { seed: number }): World {
         maxLeadStreak: 0, leadStreak: 0, leadStreakStart: 0,
       },
       inGroup: true, wasInGroup: true, status: 'course', finishTime: null, caughtAt: null, cuit: false, last: null, draft: 0,
-      hw: cfg.vent, cw: 0, posture: 0, postureT: 0,
+      hw: cfg.vent, cw: 0, posture: 0, postureT: 0, vy: 0, yTf: 0,
     };
   });
   const cpMoy = riders.reduce((s, q) => s + q.profile.cp, 0) / riders.length;
@@ -91,6 +91,6 @@ export function creerMonde(partiel: Partial<Config> & { seed: number }): World {
     attaque: null, sprintLance: false, seuils: { ecart60: false, ecart40: false, ecart25: false },
     groupe: { ordre: [], groupe: [], vitesse: vRef, meneur: null, queue: null, xMoyen: 0, xFront: 0, tanB: 0, yTete: 0, coteMontant: -1 },
     result: { statut: 'en cours', echappeeSurvit: false, ordre: [], vainqueur: null, repris: [], tFin: 0, distanceReprise: null },
-    nextEventId: 0, vRef, road, vent,
+    nextEventId: 0, vRef, vRef0: vRef, road, vent,
   };
 }

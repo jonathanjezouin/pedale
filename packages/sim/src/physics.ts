@@ -7,7 +7,10 @@ export const G = 9.81;
 export const CRR = 0.004;
 export const RIDER_LEN = 1.8;       // m
 export const MARGE_BORD = 0.45;     // m : un coureur reste à au moins cette distance du bord de la route
-export const MAX_LAT_SPEED = 0.9;   // m/s
+export const MAX_LAT_SPEED = 1.0;   // m/s
+export const LAT_ACCEL = 1.3;       // m/s² : un coureur ne change pas de trajectoire d'un coup
+export const LAT_TAU = 0.7;         // s : constante de temps du filtre de consigne latérale
+export const FREINAGE_MAX = 2.5;    // m/s² de décélération par les freins
 export const E_CUIT = 0.12;         // seuil « sans réserve » (§6.3 Veto)
 export const X_MIN = 0.15;          // explosivité minimale pour attaquer / suivre
 
@@ -34,9 +37,11 @@ export function resistance(v: number, draft: number, r: Rider): number {
   return 0.5 * RHO * r.profile.cda * (1 - draft) * air * along + CRR * r.profile.mass * G;
 }
 
-/** Puissance nécessaire pour tenir `vTarget` en partant de `v` (bilan de forces + accélération demandée). */
-export function puissanceVers(vTarget: number, v: number, r: Rider, aMax = 1.2): number {
-  const acc = clamp(1.0 * (vTarget - v), -aMax, aMax);
+/** Puissance nécessaire pour tenir `vTarget` en partant de `v` (bilan de forces + accélération demandée).
+ *  Négative = il faut freiner (puissance « de freinage » : −m·v·décélération supplémentaire). */
+export function puissanceVers(vTarget: number, v: number, r: Rider, aMax = 1.2, frein = 0): number {
+  // frein = 0 : on ne peut que lever le pied (décélération naturelle) ; frein > 0 : on peut aussi freiner (suiveur qui se rapproche trop)
+  const acc = clamp(1.0 * (vTarget - v), -(frein || aMax), aMax);
   return (resistance(v, r.draft, r) + r.profile.mass * acc) * Math.max(v, 2);
 }
 
