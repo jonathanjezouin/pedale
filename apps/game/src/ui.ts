@@ -8,6 +8,12 @@ export const INTENT_COLOR: Record<Intention, string> = {
 };
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 export const fmtT = (s: number) => `${Math.floor(s / 60)}'${String(Math.floor(s % 60)).padStart(2, '0')}"`;
+/** Classement de course : arrivés dans l'ordre d'arrivée, puis coureurs en course du plus avancé au dernier (les repris sont exclus). */
+export function classement(w: World): number[] {
+  const arr = w.result.ordre.slice();
+  const enCourse = w.riders.filter((r) => r.status === 'course').sort((a, b) => b.x - a.x).map((r) => r.id);
+  return arr.concat(enCourse);
+}
 export const fmtKm = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(m >= 10000 ? 1 : 2)} km` : `${Math.max(0, Math.round(m))} m`);
 
 /* ---------------- HUD ---------------- */
@@ -35,11 +41,11 @@ export function updateHud(w: World) {
 let rowsBuilt = false;
 export function buildRiders(w: World, onSelect: (id: number) => void) {
   const el = $('riders');
-  el.innerHTML = `<h2><span>Les 8 de l'échappée</span><span class="legend"><i style="background:#2f8f4e"></i>réserve<i style="background:#e49a2e"></i>explosivité</span></h2>` +
+  el.innerHTML = `<h2><span>Les 8 coureurs · ← → pour changer</span><span class="legend"><i style="background:#2f8f4e"></i>réserve<i style="background:#e49a2e"></i>explosivité</span></h2>` +
     w.riders.map((r) => {
       const pal = PALETTES[r.id % PALETTES.length]!;
       return `<div class="rider" data-id="${r.id}"><span class="badge" style="background:${pal.j};color:${isLight(pal.j) ? '#111' : '#fff'}">${r.letter}</span>
-        <div><div class="l1"><b>${cap(ARCHETYPE_LABEL[r.archetype])}</b><span class="chip" data-f="chip"></span></div>
+        <div><div class="l1"><b>${cap(ARCHETYPE_LABEL[r.archetype])}</b><span class="chip" data-f="chip"></span><span class="rk" data-f="rk"></span></div>
         <div class="bars"><i class="e"><b data-f="e"></b></i><i class="x"><b data-f="x"></b></i></div></div>
         <div class="num"><b data-f="v"></b><br><span data-f="p"></span></div></div>`;
     }).join('');
@@ -51,6 +57,7 @@ function isLight(hex: string) { const n = parseInt(hex.slice(1), 16); return ((n
 
 export function updateRiders(w: World, sel: number) {
   if (!rowsBuilt) return;
+  const rk = classement(w);
   document.querySelectorAll<HTMLElement>('#riders .rider').forEach((row) => {
     const r = w.riders[Number(row.dataset.id)]!;
     row.classList.toggle('sel', r.id === sel);
@@ -60,6 +67,7 @@ export function updateRiders(w: World, sel: number) {
     if (r.status === 'arrive') { chip.textContent = 'Arrivé'; chip.style.setProperty('--c', '#2f8f4e'); }
     else if (r.status === 'repris') { chip.textContent = 'Repris'; chip.style.setProperty('--c', '#555'); }
     else if (r.intent.kind) { chip.textContent = r.intent.sprint ? 'Sprint' : INTENTION_LABEL[r.intent.kind]; chip.style.setProperty('--c', INTENT_COLOR[r.intent.kind]); }
+    const pos = rk.indexOf(r.id); f('rk').textContent = pos >= 0 ? (pos === 0 ? '1er' : `${pos + 1}e`) : '';
     f('e').style.width = `${Math.round(r.E * 100)}%`; f('x').style.width = `${Math.round(r.X * 100)}%`;
     f('v').textContent = `${(r.v * 3.6).toFixed(0)} km/h`; f('p').textContent = `${Math.round(r.p)} W`;
   });

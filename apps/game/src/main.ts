@@ -4,7 +4,7 @@ import type { World } from '@pedale/sim';
 import { BIOMES, BIOME_KEYS, PX_PER_M, Scenery, TILE } from './scenery';
 import type { BiomeKey } from './scenery';
 import { FRAMES, clearRiderTextures, riderTexture } from './riders';
-import { INTENT_COLOR, buildRiders, hideEnd, pushFeed, showEnd, updateHud, updateMini, updateRiders, updateStrip, updateTrace } from './ui';
+import { INTENT_COLOR, classement, buildRiders, hideEnd, pushFeed, showEnd, updateHud, updateMini, updateRiders, updateStrip, updateTrace } from './ui';
 
 const SIM_DT = 0.25;
 const TAU = Math.PI * 2;
@@ -153,16 +153,9 @@ app.ticker.add(() => {
   cam.x += (tx - cam.x) * Math.min(1, dtReal * kPos); cam.y += (ty - cam.y) * Math.min(1, dtReal * kPos);
   if (dtReal > 0) { cam.vx += ((cam.x - px) / dtReal - cam.vx) * 0.15; cam.vy += ((cam.y - py) / dtReal - cam.vy) * 0.15; }
   const rot = -Math.PI / 2 - cam.rot, cr = Math.cos(rot), sr = Math.sin(rot);
-  // zoom : tous les coureurs encore en course doivent rester à l'écran (niveau de détail)
-  const fx = Math.cos(cam.rot), fy = Math.sin(cam.rot);                               // « devant » dans le monde
-  const aheadRoom = viewH * 0.56 * 0.88, behindRoom = viewH * 0.44 * 0.88, sideRoom = viewW * 0.46;
-  let need = 1e9;
-  for (const o of live) {
-    const dx = o.x - cam.x, dy = o.y - cam.y, ahead = dx * fx + dy * fy, side = -dx * fy + dy * fx;
-    if (Math.abs(ahead) > 1) need = Math.min(need, (ahead > 0 ? aheadRoom : behindRoom) / Math.abs(ahead));
-    if (Math.abs(side) > 1) need = Math.min(need, sideRoom / Math.abs(side));
-  }
-  cam.zoom += (Math.max(0.35, Math.min(cam.user, need)) - cam.zoom) * Math.min(1, dtReal * 2.5);
+  // zoom : celui de l'utilisateur (molette), jamais modifié automatiquement : la caméra ne « monte » plus selon le coureur choisi
+  cam.zoom += (cam.user - cam.zoom) * Math.min(1, dtReal * 6);
+  const fx = Math.cos(cam.rot), fy = Math.sin(cam.rot); void fx; void fy;
   world.rotation = rot; world.scale.set(cam.zoom); world.pivot.set(cam.x, cam.y); world.position.set(viewW / 2, viewH * 0.6);
   const toScreen = (x: number, y: number) => { const dx = (x - cam.x) * cam.zoom, dy = (y - cam.y) * cam.zoom; return { x: viewW / 2 + dx * cr - dy * sr, y: viewH * 0.6 + dx * sr + dy * cr }; };
 
@@ -234,8 +227,13 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'c' || e.key === 'C') toggleCam();
   else if (e.key === 'v' || e.key === 'V') toggleVent(); else if (e.key === 'r' || e.key === 'R') toggleRoute();
   else if (e.key === 'Tab') { select((selected + 1) % W.riders.length); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {            // ← coureur devant au classement, → coureur derrière
+    const rk = classement(W), i = rk.indexOf(selected);
+    select(i < 0 ? (rk[0] ?? selected) : rk[Math.max(0, Math.min(rk.length - 1, i + (e.key === 'ArrowLeft' ? -1 : 1)))]!);
+    e.preventDefault();
+  }
 });
-stageEl.addEventListener('wheel', (e) => { cam.user = Math.max(0.6, Math.min(1.8, cam.user * (e.deltaY < 0 ? 1.08 : 0.926))); }, { passive: true });
+stageEl.addEventListener('wheel', (e) => { cam.user = Math.max(0.35, Math.min(2.2, cam.user * (e.deltaY < 0 ? 1.08 : 0.926))); }, { passive: true });
 stageEl.addEventListener('pointerdown', (e) => {
   const rect = stageEl.getBoundingClientRect(), viewW = app.screen.width, viewH = app.screen.height;
   const rot = -Math.PI / 2 - cam.rot, cr = Math.cos(rot), sr = Math.sin(rot);
