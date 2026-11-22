@@ -152,9 +152,13 @@ export function updateStrip(w: World, sel: number) {
   }
   const L = w.finishX, pct = (x: number) => `${Math.max(0, Math.min(1, x / L)) * 100}%`;
   const rk = classement(w);
+  // étape : chaque point se pose sur la courbe du profil, à l'altitude du coureur (docs/v0.0.6-menu.md §4)
+  const pf = w.road.profilEtape; let mn = 0, mx = 1;
+  if (pf) { mn = Infinity; mx = -Infinity; for (let i = 0; i < pf.n; i += 5) { mn = Math.min(mn, pf.alt[i]!); mx = Math.max(mx, pf.alt[i]!); } }
   $('dots').innerHTML = w.riders.map((r) => {
     const pal = PALETTES[r.id % PALETTES.length]!, k = rk.indexOf(r.id);
-    return `<i class="dot ${r.id === sel ? 'sel' : ''}" style="left:${pct(r.x)};top:${24 + (k % 3) * 7}px;background:${pal.j}" title="${r.letter}"></i>`;
+    const top = pf ? 2 + 30 * (1 - (w.road.alt(Math.max(0, r.x)) - mn) / Math.max(1, mx - mn)) - 6 + (k % 3) * 2 : 24 + (k % 3) * 7;
+    return `<i class="dot ${r.id === sel ? 'sel' : ''}" style="left:${pct(r.x)};top:${top.toFixed(1)}px;background:${pal.j}" title="${r.letter}"></i>`;
   }).join('');
   const act = w.riders.filter((r) => r.status === 'course');
   const lead = act.length ? Math.max(...act.map((r) => r.x)) : w.finishX;

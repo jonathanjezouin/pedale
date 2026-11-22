@@ -1,23 +1,28 @@
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
-import { genererParcours, LIBELLE_TYPE, TYPES } from '@pedale/parcours';
+import { LIBELLE_TYPE, TYPES } from '@pedale/parcours';
 import type { TypeEtape } from '@pedale/parcours';
 import { ASPIRATION, aspirationValeur, creerMonde, pas, RIDER_LEN, tanVent } from '@pedale/sim';
 import type { World } from '@pedale/sim';
 import { BIOMES, BIOME_KEYS, PX_PER_M, Scenery, TILE } from './scenery';
 import type { BiomeKey } from './scenery';
 import { FRAMES, clearRiderTextures, riderTexture } from './riders';
+import { DECOR_AUTO, FINALES_MENU, fermerMenu, genererChoix, menuOuvert, ouvrirMenu } from './menu';
+import type { Choix, ChoixDecor, ChoixFinale } from './menu';
 import { classement, buildRiders, hideEnd, pushFeed, showEnd, updateHud, updateMini, updateRiders, updateStrip, updateTrace } from './ui';
 
 const SIM_DT = 0.25;
 const TAU = Math.PI * 2;
 const qs = new URLSearchParams(location.search);
 let seed = Number(qs.get('seed') ?? 20260);
-let biome: BiomeKey = (BIOME_KEYS as string[]).includes(qs.get('biome') ?? '') ? (qs.get('biome') as BiomeKey) : 'prairie';
+// décor : « auto » suit le type d'étape (docs/v0.0.6-menu.md §2) ; ?biome=desert l'impose
+let decor: ChoixDecor = (BIOME_KEYS as string[]).includes(qs.get('biome') ?? '') ? (qs.get('biome') as BiomeKey) : 'auto';
+let biome: BiomeKey = decor === 'auto' ? 'prairie' : decor;
 let ventMode: 'fixe' | 'face' = qs.get('vent') === 'face' ? 'face' : 'fixe';
 let route: 'courbes' | 'droite' = qs.get('route') === 'droite' ? 'droite' : 'courbes';
 // étape générée (docs/v0.0.5-pente.md) : ?etape=montagne&km=150 ; sans ce paramètre, la fin d'étape plate du POC
 let etape: TypeEtape | null = (TYPES as readonly string[]).includes(qs.get('etape') ?? '') ? (qs.get('etape') as TypeEtape) : null;
-const kmEtape = Math.min(250, Math.max(20, Number(qs.get('km') ?? 100)));
+let kmEtape = Math.min(250, Math.max(20, Number(qs.get('km') ?? 100)));
+let finale: ChoixFinale = (FINALES_MENU as string[]).includes(qs.get('finale') ?? '') ? (qs.get('finale') as ChoixFinale) : 'auto';
 
 const stageEl = document.getElementById('stage')!;
 const app = new Application();
@@ -71,9 +76,11 @@ function pos(s: number, d: number) { const p = W.road.toXY(s, d); return { x: p.
 
 function newWorld(s: number) {
   seed = s;
-  W = creerMonde({ seed, trace: 'changements', ventMode, route, ...(etape ? { parcours: genererParcours({ seed, distance: kmEtape * 1000, type: etape }) } : {}) });
+  biome = decor === 'auto' ? DECOR_AUTO[etape ?? 'poc'] : decor;
+  const parcours = genererChoix({ type: etape ?? 'poc', km: kmEtape, finale, seed, decor });
+  W = creerMonde({ seed, trace: 'changements', ventMode, route, ...(parcours ? { parcours } : {}) });
   document.body.classList.toggle('etape', !!etape);
-  document.getElementById('hTitre')!.textContent = etape ? `Pédale · v0.0.5 · huit coureurs, étape ${LIBELLE_TYPE[etape].toLowerCase()} de ${kmEtape} km` : 'Pédale · v0.0.5 · huit coureurs sur le plat';
+  document.getElementById('hTitre')!.textContent = etape ? `Pédale · v0.0.6 · huit coureurs, étape ${LIBELLE_TYPE[etape].toLowerCase()} de ${kmEtape} km` : 'Pédale · v0.0.6 · huit coureurs sur le plat';
   scenery = new Scenery(W.road, { seed, biome, finishS: W.finishX });
   prev = W.riders.map((r) => ({ x: r.x, y: r.y })); acc = 0; eventPtr = 0; ended = false; hideEnd();
   document.getElementById('feed')!.innerHTML = '';
@@ -84,7 +91,7 @@ function newWorld(s: number) {
   document.getElementById('routeName')!.textContent = route === 'courbes' ? 'Route qui tourne' : 'Route droite';
   buildRiders(W, (id) => { select(id); });
   const c = pos(W.vue.xMoyen || 0, 0); cam.x = c.x; cam.y = c.y; cam.rot = c.h; cam.vx = cam.vy = 0;
-  const url = new URL(location.href); url.searchParams.set('seed', String(seed)); url.searchParams.set('biome', biome); url.searchParams.set('vent', ventMode); url.searchParams.set('route', route); if (etape) { url.searchParams.set('etape', etape); url.searchParams.set('km', String(kmEtape)); } else { url.searchParams.delete('etape'); url.searchParams.delete('km'); } history.replaceState(null, '', url);
+  const url = new URL(location.href); url.searchParams.set('seed', String(seed)); if (decor === 'auto') url.searchParams.delete('biome'); else url.searchParams.set('biome', biome); url.searchParams.set('vent', ventMode); url.searchParams.set('route', route); if (etape) { url.searchParams.set('etape', etape); url.searchParams.set('km', String(kmEtape)); if (finale !== 'auto') url.searchParams.set('finale', finale); else url.searchParams.delete('finale'); } else { for (const k of ['etape', 'km', 'finale']) url.searchParams.delete(k); } history.replaceState(null, '', url);
   for (let i = 0; i < 2; i++) pas(W);
   eventPtr = 0;
 }
@@ -236,17 +243,24 @@ document.querySelectorAll<HTMLElement>('#controls button[data-sp]').forEach((b) 
 document.getElementById('auto')!.addEventListener('change', (e) => { auto = (e.target as HTMLInputElement).checked; });
 function select(i: number) { if (i !== selected) { selected = i; selBlend = 0.9; } }
 const nextSeed = () => newWorld(Math.floor(Math.random() * 90000) + 1000);
-const nextBiome = () => { biome = BIOME_KEYS[(BIOME_KEYS.indexOf(biome) + 1) % BIOME_KEYS.length]!; newWorld(seed); };
+const nextBiome = () => { decor = BIOME_KEYS[(BIOME_KEYS.indexOf(biome) + 1) % BIOME_KEYS.length]!; newWorld(seed); };
+function ouvrir(annulable: boolean) {
+  setSpeed(0);
+  ouvrirMenu({ type: etape ?? 'poc', km: kmEtape, finale, seed, decor }, (c: Choix) => { etape = c.type === 'poc' ? null : c.type; kmEtape = c.km; finale = c.finale; decor = c.decor; setSpeed(1); newWorld(c.seed); }, annulable ? () => setSpeed(1) : undefined);
+}
 const toggleVent = () => { ventMode = ventMode === 'fixe' ? 'face' : 'fixe'; newWorld(seed); };
 const toggleRoute = () => { route = route === 'courbes' ? 'droite' : 'courbes'; newWorld(seed); };
 document.getElementById('aspi')!.addEventListener('input', (e) => { aspiOpacity = Number((e.target as HTMLInputElement).value) / 100; });
 const toggleAspi = () => { const el = document.getElementById('aspi') as HTMLInputElement; el.value = aspiOpacity > 0 ? '0' : '80'; aspiOpacity = Number(el.value) / 100; };
 document.getElementById('bNew')!.onclick = nextSeed;
+document.getElementById('bMenu')!.onclick = () => ouvrir(true);
 document.getElementById('bBiome')!.onclick = nextBiome;
 document.getElementById('bVent')!.onclick = toggleVent;
 document.getElementById('bRoute')!.onclick = toggleRoute;
 window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).tagName === 'INPUT') return;
+  if (menuOuvert()) { if (e.key === 'Escape') { fermerMenu(); setSpeed(1); } return; }
+  if (e.key === 'p' || e.key === 'P') { ouvrir(true); return; }
   if (e.key === ' ') { setSpeed(paused ? timeScale : 0); e.preventDefault(); }
   else if (e.key === '1') setSpeed(1); else if (e.key === '2') setSpeed(4); else if (e.key === '3') setSpeed(16); else if (e.key === '4') setSpeed(64); else if (e.key === '5') setSpeed(256);
   else if (e.key === 'e' || e.key === 'E') { const o: (TypeEtape | null)[] = [null, 'plate', 'vallonnee', 'montagne']; etape = o[(o.indexOf(etape) + 1) % o.length]!; newWorld(seed); }
@@ -273,6 +287,7 @@ stageEl.addEventListener('pointerdown', (e) => {
 
 cam.user = Math.max(0.7, Math.min(1.2, app.screen.width / 1800)); cam.zoom = cam.user;
 newWorld(seed); setSpeed(1);
+if (!qs.has('seed') && !qs.has('etape')) ouvrir(false);      // pas de lien de course : on commence par choisir
 (window as unknown as { __pedale: unknown }).__pedale = {
   get world() { return W; }, setSpeed, select: (i: number) => { select(i); }, newWorld,
   advance: (sec: number) => { for (let i = 0; i < sec / SIM_DT && !over(); i++) { prev = W.riders.map((r) => ({ x: r.x, y: r.y })); pas(W); } handleEvents(); acc = 0; },

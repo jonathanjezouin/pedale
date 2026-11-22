@@ -103,7 +103,8 @@ export function creerMonde(partiel: Partial<Config> & { seed: number }): World {
   const massMoy = riders.reduce((s, q) => s + q.profile.mass, 0) / riders.length;
   // allure de départ : ~90 % du FTP moyen contre le vent de face (comparable d'un mode de vent à l'autre)
   const road = cfg.parcours ? creerRouteDepuisParcours(cfg.parcours) : creerRoute(cfg.seed, -400, cfg.distance + 500, cfg.route === 'courbes');
-  const phi = road.capMoyen(0, cfg.distance) + cfg.ventDecalage;
+  // étape : la direction du vent est tirée dans la seed, indépendamment du tracé (docs/v0.0.6-menu.md §3) ; POC : cap moyen + décalage
+  const phi = cfg.parcours ? mulberry32((cfg.seed ^ 0x71d3a9) | 0)() * 2 * Math.PI : road.capMoyen(0, cfg.distance) + cfg.ventDecalage;
   const vent = { wx: -cfg.vent * Math.cos(phi), wy: -cfg.vent * Math.sin(phi) };
   const hwMoy = cfg.vent;
   const vInit = etape ? V_DEPART_ETAPE : vitesseSolo(0.90 * ftpMoy, cdaMoy, massMoy, hwMoy);

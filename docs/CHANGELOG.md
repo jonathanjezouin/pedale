@@ -1,5 +1,12 @@
 # Journal des versions
 
+## v0.0.6 — menu de parcours, décor, vent
+- **Menu de parcours** (`P`) : type, distance 20-250 km, finale, seed, décor, avec aperçu (profil, tracé, montées classées, phrase de l'évaluateur) ; le lien reproduit le choix ; il s'ouvre seul sans `seed` ni `etape` dans l'adresse.
+- **Décor** : décor « montagne » ajouté ; décor automatique selon le type d'étape.
+- **Vent d'étape** : direction tirée dans la seed, indépendante du tracé (avant : toujours de face en moyenne) ; POC inchangé.
+- **Profil** : les points des coureurs suivent la courbe d'altitude.
+- Validation (30 étapes de 100 km) : grimpeurs vainqueurs 10 / 40 / 47 % (plate / vallonnée / montagne), 0 étape neutralisée ; allure à plat 34,8 → 38,4 km/h (vent moins souvent de face). Tests : 77 → 80. Détail : `docs/v0.0.6-menu.md`.
+
 ## v0.0.5 — pente dans la simulation
 - **Gravité** : la pente entre dans la résistance, la vitesse tenable et le dépassement ; `Road` porte altitude, pente, vitesse maximale en descente (courbure et freinage) et profil d'étape, construits depuis un parcours (`creerRouteDepuisParcours`).
 - **Départ d'étape** : énergie pleine, départ en paquet à 7,5 m/s ; deux régimes d'usure (finale POC inchangée, étape : usure ×6 plus lente et coût réduit sous le plancher) ; durée maximale et fin de simulation garanties.

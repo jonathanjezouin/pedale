@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pédale — v0.0.5</title>
+<title>Pédale — v0.0.6</title>
 <style>
   :root { --ink:#1f2328; --paper:#fbf7ea; --paper2:#f1ead2; --line:#d9cfae; --accent:#e4572e; --good:#2f8f4e; --bad:#c2392f; --mute:#6d6a5c; }
   * { box-sizing: border-box; }
@@ -75,6 +75,23 @@
   .alt.veto { color:var(--mute); } .alt .sc { font-variant-numeric:tabular-nums; font-weight:700; }
   .quote { background:#fff; border-left:4px solid var(--ink); padding:6px 9px; border-radius:0 6px 6px 0; margin-top:4px; }
   .muted { color:var(--mute); font-size:11px; }
+  #menu { position:fixed; inset:0; background:rgba(20,25,10,.55); display:grid; place-items:center; z-index:20; }
+  #menu[hidden] { display:none; }
+  #menu .mbox { background:var(--paper); padding:20px 24px; border-radius:12px; width:min(820px, 94vw); max-height:92vh; overflow:auto; box-shadow:0 8px 0 rgba(0,0,0,.25); }
+  #menu h2 { margin:0 0 10px; font-size:22px; }
+  #menu .mgrid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width:700px) { #menu .mgrid { grid-template-columns:1fr; } }
+  #menu label { display:block; margin:10px 0 4px; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--mute); }
+  #menu .seg { display:flex; flex-wrap:wrap; gap:4px; } #menu .row { display:flex; gap:6px; }
+  #menu input[type=range] { width:100%; } #menu input[type=number] { width:120px; padding:6px; font:600 13px inherit; border:1px solid var(--line); border-radius:6px; }
+  #menu button:disabled { opacity:.4; cursor:default; }
+  #menu .btns { display:flex; gap:8px; margin-top:16px; } #menu .go { background:var(--accent); color:#fff; padding:10px 22px; font-size:14px; }
+  #menu .mprev { display:grid; grid-template-columns:1fr 90px; gap:8px; height:110px; margin-bottom:6px; }
+  #menu .mprof { width:100%; height:100%; background:#fff; border:1px solid var(--line); border-radius:6px; }
+  #menu .mprof path { fill:rgba(120,140,100,.35); stroke:#6b7a58; stroke-width:1.2; vector-effect:non-scaling-stroke; }
+  #menu .mtrace { width:90px; height:90px; background:#fff; border:1px solid var(--line); border-radius:6px; }
+  #menu .mtrace path { fill:none; stroke:#4b4d55; stroke-width:1.6; stroke-linejoin:round; }
+  #menu p { margin:4px 0; font-size:13px; } #menu .muted { color:var(--mute); } #menu ul { margin:6px 0 0; padding-left:18px; font-size:12px; }
   #end { position:fixed; inset:0; background:rgba(20,25,10,.5); display:grid; place-items:center; z-index:10; }
   #end[hidden] { display:none; }
   #end .box { background:var(--paper); padding:22px 26px; border-radius:12px; width:min(520px, 92vw); box-shadow:0 8px 0 rgba(0,0,0,.25); }
@@ -89,7 +106,7 @@
 <body>
 <div id="stage"></div>
 <div id="hud">
-  <h1 class="card" id="hTitre">Pédale · v0.0.5 · huit coureurs sur le plat</h1>
+  <h1 class="card" id="hTitre">Pédale · v0.0.6 · huit coureurs sur le plat</h1>
   <div class="stats">
     <div class="stat card"><small>Distance restante</small><b id="sKm">—</b></div>
     <div class="stat card"><small>Position</small><b id="sGap">—</b><small id="sGapSub" style="margin-top:2px;text-transform:none;letter-spacing:0"></small></div>
@@ -113,6 +130,7 @@
     <button data-sp="256"><kbd>5</kbd>×256</button>
     <label class="chk"><input type="checkbox" id="auto" checked> Ralentir sur les événements</label>
     <label class="chk" title="Affiche le sillage de chaque coureur (touche A)"><kbd>A</kbd>Aspiration <input type="range" id="aspi" min="0" max="100" value="0" style="vertical-align:middle;width:90px"></label>
+    <button id="bMenu"><kbd>P</kbd>Parcours</button>
     <button id="bNew"><kbd>N</kbd>Nouvelle course</button>
     <button id="bBiome"><kbd>B</kbd><span id="biomeName">Prairie</span></button>
     <button id="bVent"><kbd>V</kbd><span id="ventName">Vent fixe</span></button>
@@ -123,6 +141,7 @@
   <div id="riders"></div>
   <div id="trace"></div>
 </aside>
+<div id="menu" hidden></div>
 <div id="end" hidden></div>
 <script type="module" src="/src/main.ts"></script>
 </body>

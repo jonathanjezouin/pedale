@@ -233,3 +233,25 @@ describe('v0.0.5 : une étape se court, la pente fait le reste', () => {
     expect(grimpeurs / n).toBeGreaterThan(0.25);       // 2 grimpeurs sur 8 = 25 % au hasard ; ~50 % sur 30 étapes (batch)
   }, 180000);
 });
+
+describe('v0.0.6 : le vent d\'une étape ne dépend pas du cap moyen du tracé', () => {
+  const dir = (w: ReturnType<typeof creerMonde>) => Math.atan2(w.vent.wy, w.vent.wx);
+  it('la direction se tire dans la seed : mêmes seeds, même vent ; seeds différentes, directions variées', () => {
+    expect(dir(mondeEtape('plate', 30, 11))).toBeCloseTo(dir(mondeEtape('plate', 30, 11)), 9);
+    const angles = [1, 2, 3, 4, 5, 6, 7, 8].map((s) => dir(mondeEtape('vallonnee', 30, s)));
+    expect(Math.max(...angles) - Math.min(...angles)).toBeGreaterThan(Math.PI);     // pas toutes proches d'une même direction
+  });
+  it('la force du vent reste celle de la config ; le vent n\'est plus de face en moyenne sur tout le tracé', () => {
+    const w = mondeEtape('montagne', 60, 3);
+    expect(Math.hypot(w.vent.wx, w.vent.wy)).toBeCloseTo(w.cfg.vent, 6);
+    const hw = (s: number) => -(w.vent.wx * Math.cos(w.road.heading(s)) + w.vent.wy * Math.sin(w.road.heading(s)));
+    let min = Infinity, max = -Infinity;
+    for (let s = 0; s < w.finishX; s += 200) { min = Math.min(min, hw(s)); max = Math.max(max, hw(s)); }
+    expect(max - min).toBeGreaterThan(0.5);     // le tracé tourne : l'exposition varie
+  });
+  it('la course du POC garde son vent (cap moyen + décalage)', () => {
+    const w = creerMonde({ seed: 20260 });
+    const phi = w.road.capMoyen(0, w.cfg.distance) + w.cfg.ventDecalage;
+    expect(dir(w)).toBeCloseTo(Math.atan2(-Math.sin(phi), -Math.cos(phi)), 6);
+  });
+});

@@ -15,7 +15,7 @@ const HALF = ROAD_W / 2;
 const TAU = Math.PI * 2;
 const SUN = { x: 0.55, y: 0.83 };
 
-export type BiomeKey = 'prairie' | 'desert' | 'automne';
+export type BiomeKey = 'prairie' | 'desert' | 'automne' | 'montagne';
 export interface Biome {
   label: string; base: string; blobs: string[]; shoulder: string; verge: string; lake: boolean; water: string; shore: string;
   trees: [string, string][]; fields: string[]; stripes: boolean; roof: string[]; wall: string; extras: string[]; forest: number;
@@ -31,6 +31,11 @@ export const BIOMES: Record<BiomeKey, Biome> = {
     label: 'Désert', base: '#d9a863', blobs: ['#cf9a56', '#e6bb7c', '#c78848', '#e2b36e'], shoulder: '#ecd3a0', verge: '#d9ad6c', lake: false,
     water: '#5fb6ad', shore: '#e6d9aa', trees: [['#7a8a3e', '#9aa653']], fields: [], stripes: false, roof: ['#e9d4a6', '#dcc08a', '#f0e0bb'], wall: '#f1deb4',
     extras: ['cactus', 'rock', 'bush', 'bush'], forest: 0.3,
+  },
+  montagne: {
+    label: 'Montagne', base: '#8a9a6e', blobs: ['#7a8b62', '#9aa883', '#a39f8e', '#6f8260'], shoulder: '#c4bba3', verge: '#8fa070', lake: false,
+    water: '#6aa6b4', shore: '#cfc7ad', trees: [['#2f5a3a', '#44744a'], ['#264d35', '#3b6844'], ['#3a6a40', '#55854f']],
+    fields: [], stripes: false, roof: ['#8a5a44', '#6f4a3a', '#a06a4a'], wall: '#e6dcc4', extras: ['rock', 'rock', 'bush'], forest: 0.8,
   },
   automne: {
     label: 'Automne', base: '#a9a55c', blobs: ['#928f48', '#bdb26a', '#b08a4a', '#9a9a50'], shoulder: '#cdb98f', verge: '#b2ab62', lake: true,

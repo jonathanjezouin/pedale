@@ -14,7 +14,7 @@ Jeu de cyclisme sur route, vue 100 % de dessus. On incarne un seul coureur, de l
 - **Plan de développement jusqu'à la v0.1.0** : [`docs/v0.1.0-plan.md`](docs/v0.1.0-plan.md)
 - POC graphique initial (HTML seul) : [`docs/poc-graphique/`](docs/poc-graphique/index.html)
 
-## v0.0.5 — huit coureurs, une étape avec relief ; raisonnement individuel ; module de parcours
+## v0.0.6 — huit coureurs, une étape au choix (menu de parcours) ; raisonnement individuel ; module de parcours
 
 Huit coureurs qui s'affrontent, chacun pour soi, sur une route qui tourne avec un vent fixe (pas de peloton poursuivant ; des groupes se forment, c'est tout). Chaque coureur
 raisonne par étages — **percevoir → interpréter → vouloir → agir** — avec 7 intentions (s'abriter, se placer, participer, attaquer, suivre, revenir, gérer) et des raisons nommées ; il ne connaît pas les autres, il les déduit de ce qu'il voit.
@@ -37,7 +37,7 @@ npm run dist         # installeur Windows (electron-builder) — à lancer sous 
 ```
 
 Raccourcis : `Espace` pause · `1-5` vitesse ×1/×4/×16/×64/×256 · `E` étape (aucune → plate → vallonnée → montagne) · `Tab` coureur suivant · `←` `→` coureur devant / derrière au classement · `N` nouvelle course · `B` biome · `A` aspiration (curseur) · `V` vent fixe / de face · `R` route qui tourne / droite · molette = zoom.
-Paramètres d'URL : `?seed=1234&biome=desert&vent=face&route=droite`. **Étape** : `?etape=montagne&km=150&seed=7` (en attendant le menu de la v0.0.6). **Relecture** : `?seed=9&t=1200&pause=1` ouvre la course 9 à 20 min, en pause (puis `Espace` / `1` pour la regarder, `Tab` / `←` `→` pour choisir un coureur et lire « pourquoi ? »).
+Paramètres d'URL : `?seed=1234&biome=desert&vent=face&route=droite`. **Menu de parcours** : touche `P` (ou bouton « Parcours ») ; il s'ouvre seul quand l'adresse ne porte ni `seed` ni `etape`. **Étape** : `?etape=montagne&km=150&finale=sommet&seed=7` (le menu produit ce lien ; `biome=` impose le décor, sinon il suit le type d'étape). **Relecture** : `?seed=9&t=1200&pause=1` ouvre la course 9 à 20 min, en pause (puis `Espace` / `1` pour la regarder, `Tab` / `←` `→` pour choisir un coureur et lire « pourquoi ? »).
 
 ### Organisation
 
