@@ -1,6 +1,7 @@
 # Journal des versions
 
 ## v0.0.3 (en cours)
+- **Docs reprises et rendues cohérentes** : intentions finales (s'abriter, se placer, participer, attaquer, suivre, revenir, gérer), **FTP** comme seul nom du seuil (plus de `cp` ; frontière Z4/Z5 à 100 % du FTP), **groupe** remis comme vue dérivée, **générosité et réciprocité retirées**, autres coureurs **déduits du comportement seul**, départ en paquet, fourchettes de parcours selon la distance. Plan de développement jusqu'à la v0.1.0 : `docs/v0.1.0-plan.md`.
 - **Attributs** : conception documentée (`docs/v0.0.3-attributs.md`) : niveaux ancrés WorldTour, FTP en W/kg au centre, pas de score affiché, durabilité en % du FTP après 3000 kJ.
 - **Calibration** (`calibration.ts`) : ancrages et niveaux en données ; coureurs du POC recalés WorldTour (FTP 5,4-6,0 W/kg, pointe jusqu'à 1800 W).
 - Rapport batch § 6 : répartition par niveau et profils incohérents. Interface : FTP en W/kg et son niveau ; plus de pourcentages de générosité/agressivité.
