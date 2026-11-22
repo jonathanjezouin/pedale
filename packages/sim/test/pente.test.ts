@@ -201,7 +201,7 @@ describe('v0.0.5 : une étape se court, la pente fait le reste', () => {
   }, 120000);
   it('les groupes se désagrègent par la pente : plus de décrochages et un écart d\'arrivée plus grand en montagne qu\'en plaine', () => {
     let decPlate = 0, decMont = 0, ecartPlate = 0, ecartMont = 0;
-    const seeds = [21, 22, 23, 24, 25];
+    const seeds = [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
     for (const s of seeds) {
       for (const [type, k] of [['plate', 0], ['montagne', 1]] as const) {
         const w = courir(type, 60, s);
@@ -211,7 +211,7 @@ describe('v0.0.5 : une étape se court, la pente fait le reste', () => {
     }
     expect(decMont).toBeGreaterThan(decPlate * 1.3);
     expect(ecartMont).toBeGreaterThan(ecartPlate * 1.5);
-  }, 120000);
+  }, 240000);
   it('l\'abri vaut moins en côte qu\'à plat, en watts économisés', () => {
     const w = mondeEtape('montagne', 60, 4);
     const cote: number[] = [], plat: number[] = [];
