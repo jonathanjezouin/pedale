@@ -1,5 +1,5 @@
 /* Interface HTML : fil de course, liste des coureurs, explication « pourquoi ? », fin de course. */
-import { ARCHETYPE_LABEL, INTENTION_LABEL, PALIERS, expliquer, ftpWkg, palierDe, resumeEvaluations } from '@pedale/sim';
+import { ARCHETYPE_LABEL, INTENTION_LABEL, NIVEAUX, expliquer, ftpWkg, niveauDe, resumeEvaluations } from '@pedale/sim';
 import type { Intention, Rider, SimEvent, World } from '@pedale/sim';
 import { PALETTES } from './riders';
 
@@ -97,7 +97,7 @@ export function updateTrace(w: World, id: number) {
   el.innerHTML = `
     <h2><span>Pourquoi ?</span><span class="muted">décision de ${fmtT(d.t)} · ${d.declencheur}</span></h2>
     <div class="who">Coureur ${r.letter}, ${ARCHETYPE_LABEL[r.archetype]}</div>
-    <div class="muted">à ${fmtKm(d.distRestante)} de l'arrivée · FTP ${ftpWkg(r.profile).toFixed(1).replace('.', ',')} W/kg (${PALIERS[palierDe('ftp', ftpWkg(r.profile))]}) · pointe ${Math.round(r.profile.pPeak)} W</div>
+    <div class="muted">à ${fmtKm(d.distRestante)} de l'arrivée · FTP ${ftpWkg(r.profile).toFixed(1).replace('.', ',')} W/kg (${NIVEAUX[niveauDe('ftp', ftpWkg(r.profile))]}) · pointe ${Math.round(r.profile.pPeak)} W</div>
     <div class="sec"><b>Perçu</b><div class="pills">${pills.map((t) => `<span>${t}</span>`).join('')}</div>
       <div class="muted">Réel : réserve ${Math.round(d.reel.reserve * 100)} % — perception exacte en v0.0.1 (pas de bruit).</div></div>
     <div class="sec"><b>Interprété</b>${cap(it.phrases.join(', '))}.</div>

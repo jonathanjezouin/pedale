@@ -1,7 +1,7 @@
 /* Validation statistique du POC (§6.6) : lance N courses sans affichage et vérifie les critères.
    Huit coureurs, aucun peloton : chacun joue sa course. */
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { ARCHETYPE_LABEL, ANCRAGES, PALIERS, creerMonde, lecture, simuler } from '@pedale/sim';
+import { ARCHETYPE_LABEL, ANCRAGES, NIVEAUX, creerMonde, lecture, simuler } from '@pedale/sim';
 import type { Archetype, Attribut } from '@pedale/sim';
 
 const arg = (name: string, def: string) => { const i = process.argv.indexOf('--' + name); return i >= 0 ? process.argv[i + 1]! : def; };
@@ -85,17 +85,17 @@ console.log('\n## 6. Calibration WorldTour des coureurs générés (docs/v0.0.3-
 {
   const ATTRS = Object.keys(ANCRAGES) as Attribut[];
   const lus = Array.from({ length: N }, (_, i) => creerMonde({ seed: SEED0 + i }).riders.map((r) => ({ arch: r.archetype, ...lecture(r.profile) }))).flat();
-  console.log('| Attribut | médiane | min – max | répartition par palier (' + PALIERS.join(' / ') + ') |');
+  console.log('| Attribut | médiane | min – max | répartition par niveau (' + NIVEAUX.join(' / ') + ') |');
   console.log('|---|---|---|---|');
   for (const a of ATTRS) {
     const vals = lus.map((l) => l.valeurs[a]);
-    const rep = PALIERS.map((_, k) => pct(lus.filter((l) => l.paliers[a] === k).length, lus.length)).join(' / ');
+    const rep = NIVEAUX.map((_, k) => pct(lus.filter((l) => l.niveaux[a] === k).length, lus.length)).join(' / ');
     const f = (v: number) => (a === 'ftp' ? v.toFixed(2) : v.toFixed(0));
     console.log(`| ${a} (${ANCRAGES[a].unite}) | ${f(mediane(vals))} | ${f(Math.min(...vals))} – ${f(Math.max(...vals))} | ${rep} |`);
   }
-  // cohérence : écart de palier entre le seuil et les autres attributs d'un même coureur
-  const ecarts = lus.filter((l) => Math.abs(l.paliers.ftp - l.paliers.durabilite) >= 2 || Math.abs(l.paliers.ftp - l.paliers.explosivite) >= 3);
-  console.log(`Coureurs au profil incohérent (palier du FTP à ≥ 2 de la durabilité ou ≥ 3 de l'explosivité) : ${pct(ecarts.length, lus.length)}`);
+  // cohérence : écart de niveau entre le seuil et les autres attributs d'un même coureur
+  const ecarts = lus.filter((l) => Math.abs(l.niveaux.ftp - l.niveaux.durabilite) >= 2 || Math.abs(l.niveaux.ftp - l.niveaux.explosivite) >= 3);
+  console.log(`Coureurs au profil incohérent (niveau du FTP à ≥ 2 de la durabilité ou ≥ 3 de l'explosivité) : ${pct(ecarts.length, lus.length)}`);
 }
 
 if (process.argv.includes('--json')) {

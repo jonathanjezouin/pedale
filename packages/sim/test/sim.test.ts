@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { creerMonde, pas, simuler, expliquer, aspiration, puissanceVers, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF, palierDe, durabilitePct, ftpWkg, lecture } from '../src/index';
+import { creerMonde, pas, simuler, expliquer, aspiration, puissanceVers, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF, niveauDe, durabilitePct, ftpWkg, lecture } from '../src/index';
 
 describe('simulation v0.0.1', () => {
   it('est déterministe : même seed, même course', () => {
@@ -124,12 +124,12 @@ describe('simulation v0.0.1', () => {
 });
 
 describe('calibration WorldTour (v0.0.3)', () => {
-  it('les paliers suivent les ancrages, y compris pour une échelle inversée', () => {
-    expect(palierDe('ftp', 4.6)).toBe(0);
-    expect(palierDe('ftp', 5.0)).toBe(1);
-    expect(palierDe('ftp', 5.9)).toBe(2);
-    expect(palierDe('ftp', 6.4)).toBe(3);
-    expect(palierDe('ftp', 7)).toBe(4);
+  it('les niveaux suivent les ancrages, y compris pour une échelle inversée', () => {
+    expect(niveauDe('ftp', 4.6)).toBe(0);
+    expect(niveauDe('ftp', 5.0)).toBe(1);
+    expect(niveauDe('ftp', 5.9)).toBe(2);
+    expect(niveauDe('ftp', 6.4)).toBe(3);
+    expect(niveauDe('ftp', 7)).toBe(4);
   });
   it('la durabilité lisible est croissante avec tEnd et bornée', () => {
     expect(durabilitePct(2600)).toBeCloseTo(94, 5);
@@ -144,7 +144,7 @@ describe('calibration WorldTour (v0.0.3)', () => {
         expect(w).toBeGreaterThan(5.0);
         expect(w).toBeLessThan(6.7);
         const l = lecture(r.profile);
-        expect(l.paliers.ftp).toBeGreaterThanOrEqual(1);
+        expect(l.niveaux.ftp).toBeGreaterThanOrEqual(1);
       }
     }
   });

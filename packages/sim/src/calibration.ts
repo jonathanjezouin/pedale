@@ -11,13 +11,13 @@ import type { Profile } from './types';
 /** Masse du vélo (kg) : `Profile.mass` = coureur + vélo ; les W/kg se comptent sur le coureur seul. */
 export const VELO_KG = 7;
 
-/** Les 5 paliers, du plus bas au plus haut. Quatre seuils les séparent (résolution fine en haut). */
-export const PALIERS = ['sous le WorldTour', 'équipier', 'leader', 'top 10 mondial', 'phénomène'] as const;
-export type Palier = 0 | 1 | 2 | 3 | 4;
+/** Les 5 niveaux, du plus bas au plus haut. Quatre seuils les séparent (résolution fine en haut). */
+export const NIVEAUX = ['sous le WorldTour', 'équipier', 'leader', 'top 10 mondial', 'phénomène'] as const;
+export type Niveau = 0 | 1 | 2 | 3 | 4;
 
 export interface Ancrage {
   unite: string;
-  /** Les 4 seuils entre paliers, croissants en niveau (pour une échelle inversée, ils sont décroissants en valeur). */
+  /** Les 4 seuils entre niveaux, croissants en niveau (pour une échelle inversée, ils sont décroissants en valeur). */
   seuils: [number, number, number, number];
   /** true : plus la valeur est basse, meilleur est le niveau (traînée, temps de récupération). */
   inverse?: boolean;
@@ -32,12 +32,12 @@ export const ANCRAGES = {
 
 export type Attribut = keyof typeof ANCRAGES;
 
-/** Palier (0..4) d'une valeur pour un attribut. */
-export function palierDe(attr: Attribut, valeur: number): Palier {
+/** Niveau (0..4) d'une valeur pour un attribut. */
+export function niveauDe(attr: Attribut, valeur: number): Niveau {
   const a: Ancrage = ANCRAGES[attr];
   let p = 0;
   for (const s of a.seuils) if (a.inverse ? valeur <= s : valeur >= s) p++;
-  return p as Palier;
+  return p as Niveau;
 }
 
 /* --------------------- conversions vers les valeurs lisibles --------------------- */
@@ -57,9 +57,9 @@ export function durabilitePct(tEnd: number): number {
   return pts[pts.length - 1]![1];
 }
 
-/** Valeurs lisibles et paliers d'un profil (utilisé par l'interface et le rapport de cohérence). */
+/** Valeurs lisibles et niveaux d'un profil (utilisé par l'interface et le rapport de cohérence). */
 export function lecture(p: Profile) {
   const v = { ftp: ftpWkg(p), explosivite: p.wPrime / 1000, pointe: p.pPeak, durabilite: durabilitePct(p.tEnd) };
-  const paliers = Object.fromEntries((Object.keys(v) as Attribut[]).map((k) => [k, palierDe(k, v[k])])) as Record<Attribut, Palier>;
-  return { valeurs: v, paliers };
+  const niveaux = Object.fromEntries((Object.keys(v) as Attribut[]).map((k) => [k, niveauDe(k, v[k])])) as Record<Attribut, Niveau>;
+  return { valeurs: v, niveaux };
 }
