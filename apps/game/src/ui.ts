@@ -117,7 +117,7 @@ export function updateTrace(w: World, id: number) {
 function limitesTexte(r: Rider): string {
   const i = r.intent;
   const visé = i.effort === null ? 'effort : celui qu\'il faut pour tenir la roue' : `effort visé : ${libellePalier(i.effort)}`;
-  const groupe = i.kind === 'abriter' || i.kind === 'placer' || i.kind === 'participer' ? ` · place visée : ${PLACE_LABEL[i.place]}` : '';
+  const groupe = i.kind === 'abriter' || i.kind === 'placer' || i.kind === 'participer' ? ` · place visée : ${i.place === 'derriere' && i.cible !== null ? 'derrière ' + String.fromCharCode(65 + i.cible) : PLACE_LABEL[i.place]}` : '';
   return `${visé} · accepte jusqu'à ${palierDe(i.effortMax).code} (${Math.round(i.effortMax * 100)} %) · fatigue max ${Math.round(i.fatigueMax * 100)} %${groupe}`;
 }
 

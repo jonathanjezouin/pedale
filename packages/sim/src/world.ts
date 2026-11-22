@@ -98,7 +98,7 @@ function decider(w: World, r: Rider, declencheur: string) {
   // à moins de 600 m, toute attaque est de fait un sprint (pas d'« écart » à tenter sur un sprint)
   const sprintRaison = ev.raisons.some((q) => q.id === 'sprint' && q.valeur > 0) || (choisie === 'attaquer' && percu.course.distRestante <= 600);
   const evts = percu.moi.evenements;
-  const prev = { effort: it.effort, place: it.place, placeAtteinte: it.placeAtteinte };
+  const prev = { effort: it.effort, place: it.place, placeAtteinte: it.placeAtteinte, cible: it.cible };
 
   if (change) {
     it.kind = choisie; it.since = w.t; it.sprint = false; it.cible = null;

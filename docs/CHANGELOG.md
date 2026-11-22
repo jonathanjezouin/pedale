@@ -1,6 +1,15 @@
 # Journal des versions
 
 ## v0.0.3
+### v0.0.3c — plancher et place au moindre effort
+- **Plancher** : 87 % du FTP (haut de Z3), multiplié par la fraîcheur : l'effort qu'on tient longtemps. Sans raison supplémentaire, on roule à son plancher ; en tête, « garder des forces » n'est plus une raison de refuser un effort qui ne coûte presque rien. L'allure du groupe devient celle du plancher du meneur.
+- **Place au moindre effort** : la place visée `derriere` cible un coureur (le dernier qui roule, la queue, un cran plus loin quand on est à la peine). Remplace « glisser jusqu'à la queue ». « Inconnu » compte comme relayeur.
+- **Porte ouverte** : réflexe d'Agir, celui qui est derrière lève le pied (3 s par fenêtre de 9 s) pour quelqu'un qui se glisse à sa hauteur à la même vitesse. Les insertions au milieu du groupe existent (> 300 sur 20 courses).
+- Groupe de 4 : chacun fait 11 à 21 tours, le rouleur mène le plus, le sprinteur le moins.
+- **Pièges corrigés** : geste de recul abandonné d'emblée pour le premier du groupe, freinage à l'arrêt sur une cible restée derrière, coureur dépassé qui roulait sur la ligne de tête, arrêt total quand tous préféraient s'abriter.
+- Batch (300 courses, v0.0.3b → v0.0.3c) : vitesse 36,5 → 36,6 km/h ; changements de tête 75 → 60 ; séquence en tête 360 → 349 s ; décrochages 8,9 → 12,0 ; part du temps en tête rouleur / sprinteur / attaquant / opportuniste 35 / 10 / 31 / 24 → 38 / 13 / 27 / 23 % ; **victoires 17 / 5 / 67 / 11 → 31 / 3 / 54 / 11 %** ; aucune course neutralisée.
+- Tests : 42 → 49.
+
 ### v0.0.3b — perception, intentions finales, relais par l'arrière
 - **Un coureur ne connaît plus les autres, il les déduit** (`observation.ts`) : une fois par seconde il voit les coureurs à portée (45 m devant, 15 m derrière) avec bruit ; il retient qui roule devant, qui accélère fort, et en déduit rouleur / suiveur / inconnu, danger supposé, état apparent. `archetype`, `pointe` et temps de tête des autres ne sont plus accessibles. Sa propre fatigue est ressentie avec bruit et biais. L'attaque d'un rival est perçue (avec délai), plus signalée à tous.
 - **Les 7 intentions finales** : s'abriter, **se placer** (nouveau), **participer**, attaquer, suivre, revenir, gérer. `relais` et `rabattre` disparaissent. Le contrat porte une **place visée** (garder, tête, avant, queue).

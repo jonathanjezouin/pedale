@@ -8,9 +8,10 @@ import type {
   AutreInterprete, Evaluation, EvenementAgir, Interprete, Intention, Percu, Place, Raison, Reel, Rider, World,
 } from './types';
 import { INTENTIONS, ARCHETYPE_LABEL } from './types';
-import { E_CUIT, vitesseSolo, wattsPour, X_MIN } from './physics';
+import { capf, E_CUIT, resistance, vitesseSolo, wattsPour, X_MIN } from './physics';
 import { clamp, smoothstep } from './util';
 import { abrite, enLigne } from './placement';
+import { PLANCHER } from './paliers';
 import { bruitDe, dangerSuppose, dispositionDe, gauss } from './observation';
 
 /** Tous les « boutons » de réglage des raisons au même endroit (équilibrage par le batch). */
@@ -60,14 +61,15 @@ export interface Contrat {
 interface CtxContrat {
   change: boolean; sprint: boolean;
   evts: EvenementAgir[];
-  prev: { effort: number | null; place: Place; placeAtteinte: boolean };
+  prev: { effort: number | null; place: Place; placeAtteinte: boolean; cible: number | null };
 }
 
-/** Effort que je choisis quand je participe (mener) : Z3-Z4 selon l'enjeu et ma fraîcheur. */
+/** Effort que je choisis quand je mène : mon plancher, sauf raison. En dessous si j'économise (réserve basse, atout sprint) ;
+ *  au-dessus si je veux user un rival que je crois dangereux. */
 export function effortParticiper(p: Percu, ip: Interprete, prof: { pointe: number }): number {
   const d = p.course.distRestante;
   const user = clamp((ip.dangerMax - prof.pointe) / 0.3, 0, 1) * smoothstep(1500, 6000, d);
-  return clamp(0.85 + 0.08 * user + (p.moi.reserve > 0.6 ? 0.04 : 0) - 0.10 * ip.reserveBasse, 0.7, 1.0);
+  return clamp(ip.plancher + 0.08 * user - 0.04 * ip.sprintFocus * smoothstep(1500, 6000, d), 0.55, 1.0);
 }
 
 /** Vitesse que je tiendrais seul à cet effort (ce que je « voudrais » rouler). */
@@ -83,12 +85,27 @@ export function contrat(r: Rider, p: Percu, ip: Interprete, k: Intention, ctx: C
   let cible: number | null = roue;
   const evtFait = ctx.evts.includes('place-atteinte') || ctx.evts.includes('passage-termine');
   const persiste = !ctx.change && ctx.prev.place !== 'garder' && !ctx.prev.placeAtteinte && !evtFait;
+  // ceux que je vois derrière moi, le plus en arrière d'abord
+  const derriere = ip.autres.filter((a) => a.dx < 0).sort((a, b) => a.dx - b.dx);
+  const cibleVisible = ctx.prev.cible !== null && p.rivaux.vus.some((v) => v.id === ctx.prev.cible);
+  const persisteDerriere = persiste && ctx.prev.place === 'derriere' && cibleVisible;
 
   switch (k) {
     case 'abriter':
       effortMax = 1.2;                                              // jusqu'à Z5 pour reprendre l'abri
-      place = p.moi.estEnTete ? 'queue' : 'garder';                 // en tête, on ne s'abrite qu'en reculant
-      if (persiste && ctx.prev.place === 'queue') place = 'queue';
+      if (persisteDerriere) { place = 'derriere'; cible = ctx.prev.cible; }
+      else if (p.moi.estEnTete) {
+        // en tête, on ne s'abrite qu'en se laissant glisser derrière les autres : derrière le dernier que je vois
+        const dernier = derriere[0];
+        if (dernier) { place = 'derriere'; cible = dernier.id; }
+      } else if (ip.inconfort && p.moi.rangDansGroupe < 2 && p.moi.groupeTaille >= 3) {
+        // à la peine : je cherche la place où ça coûte moins (un cran plus loin dans la file, où deux sillages me couvrent)
+        const juste = derriere[derriere.length - 1];
+        if (juste) {
+          place = 'derriere'; cible = juste.id;
+          raisonsPlace.push({ id: 'inconfort', texte: `Je suis à ${Math.round(p.moi.effortRessenti * 100)} % du FTP, au-dessus de mon plancher : je cherche une place où ça coûte moins`, valeur: clamp((p.moi.effortRessenti - PLANCHER) * 10, 0.1, 3) });
+        }
+      }
       break;
     case 'placer':
       effortMax = 1.2; fatigueMax = Math.max(fat, 0.7);
@@ -98,7 +115,7 @@ export function contrat(r: Rider, p: Percu, ip: Interprete, k: Intention, ctx: C
       effortMax = 1.15;                                             // un dépassement est une courte pointe (Z5), au-dessus de l'effort de mené
       const user = clamp((ip.dangerMax - prof.pointe) / 0.3, 0, 1) * smoothstep(1500, 6000, d);
       effort = effortParticiper(p, ip, prof);
-      if (persiste && ctx.prev.place === 'queue') { place = 'queue'; break; }
+      if (persisteDerriere) { place = 'derriere'; cible = ctx.prev.cible; break; }
       if (persiste && ctx.prev.place === 'tete') { place = 'tete'; break; }
       if (p.moi.estEnTete) {
         // quitter la tête : décision de celui qui est devant, avec ses raisons
@@ -109,7 +126,9 @@ export function contrat(r: Rider, p: Percu, ip: Interprete, k: Intention, ctx: C
         q('rasLeBol', 'Je suis presque le seul à rouler depuis longtemps', 4.5 * ip.rasLeBol);
         q('reserve', 'Ma réserve est basse', 3 * ip.reserveBasse);
         q('user', `Je veux continuer à user ${ip.dangerLetter ?? 'mon rival'}`, -2 * user);
-        if (rq.reduce((s, x) => s + x.valeur, 0) >= TUNE.seuilQuitter) { place = 'queue'; raisonsPlace.push(...rq); }
+        // je me replace derrière le dernier qui roule (« inconnu » compte comme relayeur tant qu'il n'a pas montré le contraire) ; s'il n'y en a pas, je reste devant
+        const relayeur = derriere.find((a) => a.disposition !== 'suiveur');
+        if (relayeur && rq.reduce((s, x) => s + x.valeur, 0) >= TUNE.seuilQuitter) { place = 'derriere'; cible = relayeur.id; raisonsPlace.push(...rq); }
       } else if (!p.moi.decroche) {
         // passer devant un groupe qui va moins vite que ce que je veux tenir
         const vVoulue = vitesseVoulue(r, effort);
@@ -233,6 +252,10 @@ export function interpreter(r: Rider, p: Percu): Interprete {
   const sumAll = mine + tetes.reduce((s, v) => s + v, 0);
   const rasLeBol = sumAll >= 90 ? clamp((mine / sumAll - 0.45) / 0.4, 0, 1) : 0;
   const sprintFocus = clamp((p.profil.pointe - 0.45) / 0.4, 0, 1);
+  // mon plancher du moment, et ce que me coûterait de tenir l'allure du groupe en tête (exposé) : la question « puis-je rouler sans me cramer ? »
+  const plancher = PLANCHER * capf(p.moi.reserve);
+  const vAllure = Math.max(p.rivaux.allure, 1);
+  const effortRequis = (resistance(vAllure, 0, r) * vAllure) / r.profile.ftp;
 
   const tend = p.rivaux.tendanceAllure;
   const rythme: Interprete['groupe']['rythme'] = tend > 0.4 ? 'monte' : tend < -0.4 ? 'baisse' : 'stable';
@@ -243,6 +266,8 @@ export function interpreter(r: Rider, p: Percu): Interprete {
   if (explosivite === 'vide') phrases.push("je n'ai plus d'explosivité");
   if (excesRelais > 0.25) phrases.push("j'ai plus roulé que ce que j'ai vu des autres");
   if (p.moi.groupeTaille > 1) phrases.push(`je suis dans un groupe de ${p.moi.groupeTaille}${rythme === 'baisse' ? ', l\'allure baisse' : rythme === 'monte' ? ', l\'allure monte' : ''}`);
+  if (!p.moi.estEnTete && p.moi.effortRessenti > plancher + 0.03) phrases.push(`je suis à la peine (${Math.round(p.moi.effortRessenti * 100)} % du FTP, au-dessus de mon plancher de ${Math.round(plancher * 100)} %)`);
+  if (p.moi.estEnTete) phrases.push(effortRequis <= plancher + 0.05 ? `tenir cette allure en tête me coûte ${Math.round(effortRequis * 100)} % du FTP : dans mon plancher` : `tenir cette allure en tête me coûterait ${Math.round(effortRequis * 100)} % du FTP, au-dessus de mon plancher de ${Math.round(plancher * 100)} %`);
   if (position === 'decroche') phrases.push(`je suis décroché (${Math.round(p.moi.ecartDevant)} m)`);
   else if (position === 'premier') phrases.push('je suis en tête de la course');
   else if (p.moi.estEnTete) phrases.push('je suis en tête de mon groupe');
@@ -255,6 +280,8 @@ export function interpreter(r: Rider, p: Percu): Interprete {
     forme, explosivite, distance, position, placement: p.moi.abrite > 0.12 ? 'abrite' : 'expose',
     reserveBasse: clamp((0.45 - E) / 0.35, 0, 1), explosiviteBasse: clamp((0.6 - X) / 0.4, 0, 1),
     excesRelais, rasLeBol, sprintFocus, autres, groupe: { taille: p.moi.groupeTaille, rythme, cohesion },
+    plancher, effortRequis, inconfort: !p.moi.estEnTete && p.moi.effortRessenti > plancher + 0.03,
+    inconfortEnTete: p.moi.estEnTete && effortRequis > plancher + 0.05,
     dangerMax, dangerLetter, fractionFrais, avanceSurVus, phrases,
   };
 }
@@ -282,7 +309,10 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         mk(raisons, 'forces', 'Je veux garder des forces pour la fin', (1.5 + 1.5 * it.sprintFocus) * smoothstep(500, 2500, d));
         mk(raisons, 'reserve', 'Ma réserve est basse', 4 * it.reserveBasse);
         mk(raisons, 'dejaRoule', "J'ai déjà roulé plus que ce que j'ai vu des autres", 2.5 * it.excesRelais);
-        if (enTete) mk(raisons, 'reculer', 'Je suis devant : pour m\'abriter il faut que je recule', -0.5);
+        if (enTete) {
+          mk(raisons, 'reculer', 'Je suis devant : pour m\'abriter il faut que je recule', -0.5);
+          mk(raisons, 'inconfort', `Mener à cette allure me coûterait ${Math.round(it.effortRequis * 100)} % du FTP, au-dessus de mon plancher de ${Math.round(it.plancher * 100)} %`, 3.0 * clamp((it.effortRequis - it.plancher) / 0.1, 0, 1));
+        }
         break;
       }
       case 'placer': {
@@ -303,7 +333,11 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         if (p.moi.decroche) vetos.push("Je suis décroché : j'ai déjà quelqu'un à rattraper devant moi");
         if (it.dangerMax > 0.2)
           mk(raisons, 'user', `Pour gagner, je dois user ${it.dangerLetter} : plus la course est dure, moins il aura de jambes à la fin`, 2.5 * clamp((it.dangerMax - prof.pointe) / 0.3, 0, 1) * smoothstep(1500, 6000, d));
-        if (enTete) mk(raisons, 'devant', 'Je suis devant : personne à qui prendre la roue', 1.5);
+        if (enTete) {
+          mk(raisons, 'devant', 'Je suis devant : personne à qui prendre la roue', 1.5);
+          // sans raison de faire autre chose, je roule à ce que je peux tenir sans me cramer
+          mk(raisons, 'plancher', `Tenir cette allure en tête me coûte ${Math.round(it.effortRequis * 100)} % du FTP : dans mon plancher, rien ne m'oblige à ralentir`, 3.5 * clamp((it.plancher + 0.03 - it.effortRequis) / 0.08, 0, 1));
+        }
         mk(raisons, 'jambes', 'Mes jambes sont bonnes', 1.2 * clamp((p.moi.reserve - 0.5) / 0.35, 0, 1));
         {
           const vVoulue = vitesseVoulue(r, effortParticiper(p, it, prof)), allure = p.rivaux.allure;

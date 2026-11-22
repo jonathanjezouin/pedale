@@ -152,6 +152,14 @@ export function agir(w: World, r: Rider): Commande {
   }
 }
 
+/** Quelqu'un est-il en train de se glisser dans la file juste devant moi ? Il est à ma hauteur (ou un peu devant), à côté de la file, à ma vitesse :
+ *  il ne passe pas (il irait plus vite) et il ne se laisse pas glisser (il irait moins vite). Réflexe d'Agir, pas une décision. */
+export function porteOuverte(w: World, r: Rider, m: Rider): boolean {
+  if (m === r || m.status !== 'course') return false;
+  const ecartAxe = Math.abs(m.y - axeY(w, m.x));
+  return ecartAxe > 0.9 && ecartAxe < 2.2 && m.x - r.x > -1.0 && m.x - r.x < 2.4 && Math.abs(m.v - r.v) < 0.6;
+}
+
 /** Les gestes de groupe : passer en tête, reculer jusqu'à la queue, remonter près de l'avant, ou garder sa place
  *  (suivre une roue, et mener quand personne n'est devant). La place visée vient de Vouloir ; ici on ne fait que l'exécuter. */
 function enGroupe(w: World, r: Rider, pMax: number, watts: (e: number) => number): Commande {
@@ -178,19 +186,31 @@ function enGroupe(w: World, r: Rider, pMax: number, watts: (e: number) => number
     if (ge.phase === 'monte') { ge.phase = 'garde'; declarer(w, r, 'passage-termine'); }
   }
 
-  // reculer : on s'écarte (en gardant l'allure tant qu'on est dans la file, sinon la file derrière freinerait avec nous), on se laisse glisser, puis on rejoint la queue
-  if (place === 'queue' && aut.length) {
-    const file = aut.filter((o) => enLigne(w, o));
-    const queueX = (file.length ? file : aut).reduce((m, o) => Math.min(m, o.x), 1e9);
-    if (ge.phase === '') ge.phase = 'decale';
-    // le geste se termine quand je suis derrière la queue ; s'il n'aboutit pas (tout le monde ralentit avec moi), je le déclare fini au bout de 25 s
-    if (ge.phase === 'decale' && (r.x <= queueX - 3.0 || w.t - ge.phaseSince > 25)) { ge.phase = 'rejoint'; ge.phaseSince = w.t; declarer(w, r, 'place-atteinte'); }
-    if (ge.phase === 'decale') {
-      const libre = !enLigne(w, r, 1.1);
-      // lever le pied, c'est rouler en roue libre (puissance ≥ 0) : freiner activement ferait freiner toute la file derrière
-      return { yT: yDescendant(w, r), p: Math.max(0, Math.min(pMax, puissanceVers(libre ? g.vitesse - 1.0 : g.vitesse, r.v, r))) };
-    }
-    // rejoint : on se replace derrière la queue (retombe sur « garder » ci-dessous)
+  // me placer derrière un coureur (le dernier qui roule, la queue, un cran plus loin) :
+  // 1. je m'écarte et je me laisse glisser en roue libre (on garde l'allure tant qu'on est dans la file, sinon elle freinerait avec nous),
+  // 2. une fois derrière lui, je me cale sur sa roue et je reviens dans la file : celui qui était derrière lui m'ouvre la porte (réflexe, voir `porteOuverte`).
+  if (place === 'derriere') {
+    const tgt = it.cible !== null ? w.riders[it.cible] : undefined;
+    if (tgt && tgt.status === 'course' && groupe.includes(tgt)) {
+      // geste terminé ou abandonné, mais Vouloir vise toujours cette place : on repart au bout de 4 s s'il n'est pas déjà derrière lui
+      if (ge.phase === 'garde' && w.t - ge.phaseSince > 4 && !(enLigne(w, r, 0.9) && tgt.x > r.x && tgt.x - r.x < 4.5)) ge.phase = '';
+      if (ge.phase === '') { ge.phase = tgt.x > r.x ? 'fusion' : 'decale'; ge.phaseSince = w.t; }
+      // je renonce si le geste n'aboutit pas : trop long (25 s), ou je me suis laissé distancer (je ne vais pas me faire décrocher pour une place)
+      if ((ge.phase === 'decale' || ge.phase === 'fusion') && (w.t - ge.phaseSince > 25 || (r.ecartDevant > 15 && r.ecartDevant < 1e8))) { ge.phase = 'garde'; ge.phaseSince = w.t; declarer(w, r, 'place-atteinte', 'abandon'); }
+      if (ge.phase === 'decale' && r.x <= tgt.x - (RIDER_LEN + 0.5)) { ge.phase = 'fusion'; ge.phaseSince = w.t; }
+      // la cible est repassée derrière moi (elle a ralenti aussi) : je ne freine pas pour l'attendre, je continue de glisser
+      if (ge.phase === 'fusion' && tgt.x < r.x - 1.0) { ge.phase = 'decale'; ge.phaseSince = w.t; }
+      if (ge.phase === 'decale') {
+        const libre = !enLigne(w, r, 1.1);
+        // lever le pied, c'est rouler en roue libre (puissance ≥ 0) : freiner activement ferait freiner toute la file derrière
+        return { yT: yDescendant(w, r), p: Math.max(0, Math.min(pMax, puissanceVers(libre ? g.vitesse - 1.0 : g.vitesse, r.v, r))) };
+      }
+      if (ge.phase === 'fusion') {
+        const dedans = enLigne(w, r, 0.9) && tgt.x > r.x && tgt.x - r.x < 4.5;
+        if (dedans) { ge.phase = 'garde'; ge.phaseSince = w.t; declarer(w, r, 'place-atteinte'); }
+        else return { yT: placeDansLaFile(w, r), p: suivre(w, tgt, r) };
+      }
+    } else if (ge.phase !== 'garde') { ge.phase = 'garde'; declarer(w, r, 'place-atteinte', 'cible perdue'); }
   }
 
   // remonter près de l'avant, sans passer en tête
@@ -199,12 +219,23 @@ function enGroupe(w: World, r: Rider, pMax: number, watts: (e: number) => number
     if (ge.phase === 'monte') { ge.phase = 'garde'; declarer(w, r, 'place-atteinte'); }
   }
 
+  // porte ouverte : quelqu'un revient à ma hauteur par le côté, à la même vitesse, pour se glisser devant moi : je lève le pied pour lui faire de la place
+  // (au plus 3 s par fenêtre de 9 s : si l'autre ne se glisse pas, je ne vais pas me faire décrocher pour lui)
+  if (enLigne(w, r, 0.9) && aut.some((m) => porteOuverte(w, r, m))) {
+    if (ge.porteDepuis < 0 || w.t - ge.porteDepuis > 9) ge.porteDepuis = w.t;
+    if (w.t - ge.porteDepuis < 3) {
+      const roue0 = roueChoisie(w, r);
+      return { yT: roue0 ? yAbrite(w, r, roue0) : r.y, p: Math.max(0, Math.min(pMax, puissanceVers(r.v - 0.8, r.v, r))) };
+    }
+  }
+
   // garder sa place : suivre la roue ; sans roue (en tête de mon groupe, ou seul), mener si je participe, sinon tenir l'allure
   const roue = roueChoisie(w, r);
   if (roue) return { yT: yAbrite(w, r, roue), p: suivre(w, roue, r) };
   if (it.kind === 'participer' && it.effort !== null) {
     ge.roueId = null;
-    return { yT: limiter(g.yTete + r.profile.lateral * 0.3), p: Math.min(pMax, watts(it.effort)) };
+    // seul le premier du groupe vise la position de tête (côté du vent) ; derrière quelqu'un, on se met sur l'axe de la file, où l'on retrouvera sa roue
+    return { yT: devantG.length ? placeDansLaFile(w, r) : limiter(g.yTete + r.profile.lateral * 0.3), p: Math.min(pMax, watts(it.effort)) };
   }
   ge.roueId = null;
   return { yT: placeDansLaFile(w, r), p: Math.min(wattsPour(r, 1), puissanceVers(Math.max(g.vitesse, r.v - 0.3), r.v, r)) };
@@ -217,13 +248,16 @@ export function decrireAction(w: World, r: Rider, k: Intention): string {
   const place = r.intent.place;
   switch (k) {
     case 'abriter': {
-      if (place === 'queue') return `je suis devant : je m'écarte et je me laisse glisser jusqu'à la queue pour m'abriter`;
+      if (place === 'derriere') {
+        const c = r.intent.cible !== null ? w.riders[r.intent.cible] : null;
+        return w.vue.meneur === r ? `je suis devant : je m'écarte et je me laisse glisser derrière ${c ? c.letter : 'les autres'} pour m'abriter` : `je me place derrière ${c ? c.letter : 'un autre coureur'} : ça me coûte moins`;
+      }
       const roue = roueChoisie(w, r);
       return roue ? `je me place derrière ${roue.letter}${cote}, effort minimal` : 'je reste dans la file, effort minimal';
     }
     case 'placer': return 'je remonte par le côté pour être près de l’avant, sans passer en tête';
     case 'participer': {
-      if (place === 'queue') return "j'ai fait mon tour : je m'écarte et je me laisse glisser jusqu'à la queue";
+      if (place === 'derriere') { const c = r.intent.cible !== null ? w.riders[r.intent.cible] : null; return `j'ai fait mon tour : je m'écarte et je me replace derrière ${c ? c.letter : 'le dernier qui roule'}`; }
       if (place === 'tete') return `je passe devant les autres côté ${w.vue.coteMontant < 0 ? 'gauche' : 'droit'} pour mener`;
       const roue = roueChoisie(w, r);
       return roue ? `j'attends mon tour derrière ${roue.letter}` : `je mène à ${kmh} km/h (${libellePalier(r.intent.effort ?? 0.85)})`;

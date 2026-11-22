@@ -27,9 +27,10 @@ export const INTENTION_LABEL: Record<Intention, string> = {
   gerer: 'Gérer à son rythme',
 };
 /** Place visée dans le groupe (décision de Vouloir ; le déplacement est l'affaire d'Agir) :
- *  garder (où je suis ; en tête : mener), tete (passer devant), avant (remonter près de l'avant sans passer en tête), queue (reculer jusqu'à la queue). */
-export type Place = 'garder' | 'tete' | 'avant' | 'queue';
-export const PLACE_LABEL: Record<Place, string> = { garder: 'où je suis', tete: 'en tête', avant: "près de l'avant", queue: 'à la queue' };
+ *  garder (où je suis ; en tête : mener), tete (passer devant), avant (remonter près de l'avant sans passer en tête),
+ *  derriere (me placer juste derrière le coureur `cible` : le dernier qui roule, la queue, ou une place où ça coûte moins). */
+export type Place = 'garder' | 'tete' | 'avant' | 'derriere';
+export const PLACE_LABEL: Record<Place, string> = { garder: 'où je suis', tete: 'en tête', avant: "près de l'avant", derriere: 'derrière un coureur' };
 
 /** Profil individuel : l'individualité vient des paramètres, pas de logiques différentes (§4.2). */
 export interface Profile {
@@ -91,6 +92,7 @@ export interface Geste {
   abriPrev: number;            // abri ressenti à la précédente comparaison
   abriT: number;               // instant de la dernière comparaison
   latErr: number;              // petite erreur de trajectoire latérale (précision d'exécution)
+  porteDepuis: number;         // instant où j'ai commencé à ouvrir la porte à quelqu'un (−1 : non)
 }
 
 /** Compétence d'exécution (docs/v0.0.3-comportement.md §4.3), dérivée de l'expérience : un bon coureur est près et centré, réagit vite. */
@@ -226,6 +228,10 @@ export interface Interprete {
   sprintFocus: number;        // 0..1 : mon atout est le sprint
   autres: AutreInterprete[];
   groupe: { taille: number; rythme: 'stable' | 'monte' | 'baisse'; cohesion: 'serre' | 'etire' };
+  plancher: number;           // mon plancher du moment (part du FTP) : haut de Z3, qui baisse avec la fatigue
+  effortRequis: number;       // l'effort que me coûterait de tenir l'allure du groupe en tête (exposé), en part du FTP
+  inconfort: boolean;         // je suis à la peine : mon effort dépasse mon plancher alors que je ne mène pas
+  inconfortEnTete: boolean;   // en tête, tenir l'allure du groupe me coûterait plus que mon plancher
   dangerMax: number;          // 0..1 : le plus dangereux des autres, supposé
   dangerLetter: string | null;
   fractionFrais: number;      // 0..1 : part des autres qui ont l'air frais

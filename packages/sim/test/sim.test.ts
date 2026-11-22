@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { creerMonde, pas, simuler, dureeMax, dangerSuppose, dispositionDe, PLACE_LABEL, INTENTION_LABEL, expliquer, aspiration, aspirationValeur, ASPIRATION, puissanceVers, wattsPour, capSoutenu, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF, niveauDe, durabilitePct, ftpWkg, lecture, palierDe, PALIERS, pointeNorm } from '../src/index';
 import { executionDe } from '../src/scenario';
+import { porteOuverte } from '../src/action';
+import { PLANCHER, vitesseSolo, capf, axeY, enLigne } from '../src/index';
 
 describe('simulation v0.0.1', () => {
   it('est déterministe : même seed, même course', () => {
@@ -283,16 +285,16 @@ describe('v0.0.3b : les 7 intentions finales', () => {
   it('s\'abriter, se placer, participer, attaquer, suivre, revenir, gérer ; plus de relais ni de se rabattre', () => {
     expect([...INTENTIONS]).toEqual(['abriter', 'placer', 'participer', 'attaquer', 'suivre', 'revenir', 'gerer']);
     expect(Object.keys(INTENTION_LABEL).sort()).toEqual([...INTENTIONS].sort());
-    expect(Object.keys(PLACE_LABEL).sort()).toEqual(['avant', 'garder', 'queue', 'tete']);
+    expect(Object.keys(PLACE_LABEL).sort()).toEqual(['avant', 'derriere', 'garder', 'tete']);
   });
-  it('la place visée est cohérente avec l\'intention (queue : s\'abriter ou participer ; avant : se placer ; tête : participer)', () => {
+  it('la place visée est cohérente avec l\'intention (derrière : s\'abriter ou participer ; avant : se placer ; tête : participer)', () => {
     for (const seed of [1, 2, 3]) {
       const w = creerMonde({ seed });
       for (let i = 0; i < 4 * 900 && w.result.statut !== 'termine'; i++) {
         pas(w);
         for (const r of w.riders) {
           const { kind, place } = r.intent;
-          if (place === 'queue') expect(['abriter', 'participer']).toContain(kind);
+          if (place === 'derriere') expect(['abriter', 'participer']).toContain(kind);
           if (place === 'avant') expect(kind).toBe('placer');
           if (place === 'tete') expect(kind).toBe('participer');
         }
@@ -468,5 +470,82 @@ describe('v0.0.3b : garde-fou technique', () => {
     for (let seed = 1; seed <= 20; seed++) { const w = simuler(creerMonde({ seed })); if (w.result.neutralisee) neutralisees++; expect(w.result.statut).toBe('termine'); }
     expect(neutralisees).toBe(0);
     expect(dureeMax(20000)).toBeGreaterThan(20000 / 8);
+  }, 120000);
+});
+
+describe('v0.0.3c : plancher et place au moindre effort', () => {
+  it('le plancher est le haut de Z3 et correspond à l\'allure réellement tenue (35-38 km/h seul)', () => {
+    expect(PLANCHER).toBe(0.87);
+    expect(palierDe(PLANCHER).code).toBe('Z3');
+    for (let seed = 1; seed <= 20; seed++) for (const r of creerMonde({ seed }).riders) {
+      const v = vitesseSolo(PLANCHER * r.profile.ftp, r.profile.cda, r.profile.mass, 2.5) * 3.6;
+      expect(v).toBeGreaterThan(33); expect(v).toBeLessThan(40);
+    }
+  });
+  it('le plancher personnel baisse avec la fatigue : un coureur fatigué ne peut plus tenir l\'allure', () => {
+    const w = creerMonde({ seed: 5 });
+    for (let i = 0; i < 4 * 60; i++) pas(w);
+    const r = w.riders[0]!;
+    const frais = (() => { r.E = 0.9; for (let i = 0; i < 12; i++) pas(w); return r.last!.interprete.plancher; })();
+    const fatigue = (() => { r.E = 0.15; for (let i = 0; i < 12; i++) pas(w); return r.last!.interprete.plancher; })();
+    expect(frais).toBeCloseTo(PLANCHER * capf(0.9), 1);
+    expect(fatigue).toBeLessThan(frais - 0.1);
+  });
+  it('en tête, sans raison de ralentir, on roule à son plancher : l\'effort choisi vaut le plancher (à ± 0,12)', () => {
+    const efforts: number[] = [];
+    for (const seed of [1, 2, 3]) {
+      const w = creerMonde({ seed });
+      for (let i = 0; i < 4 * 900 && w.result.statut !== 'termine'; i++) {
+        pas(w);
+        for (const r of w.riders) if (r.intent.kind === 'participer' && r.intent.place === 'garder' && r.last && r.intent.effort !== null && r.last.interprete) efforts.push(r.intent.effort - r.last.interprete.plancher);
+      }
+    }
+    expect(efforts.length).toBeGreaterThan(500);
+    const moy = efforts.reduce((a, b) => a + b, 0) / efforts.length;
+    expect(Math.abs(moy)).toBeLessThan(0.12);
+  });
+  it('porte ouverte : on lève le pied pour quelqu\'un qui se glisse à notre hauteur, à notre vitesse, à côté de la file', () => {
+    const w = creerMonde({ seed: 3 });
+    for (let i = 0; i < 40; i++) pas(w);
+    const [r, m] = w.riders as [typeof w.riders[0], typeof w.riders[0]];
+    m!.status = 'course'; r!.status = 'course';
+    r!.x = 100; r!.v = 10; r!.y = axeY(w, 100);
+    const place = (dx: number, dy: number, dv: number) => { m!.x = r!.x + dx; m!.y = axeY(w, m!.x) + dy; m!.v = r!.v + dv; return porteOuverte(w, r!, m!); };
+    expect(place(0.5, 1.4, 0)).toBe(true);        // à côté, un peu devant, même vitesse
+    expect(place(-0.5, -1.4, 0.2)).toBe(true);    // de l'autre côté de la file
+    expect(place(0.5, 1.4, 1.0)).toBe(false);     // il passe (plus vite) : rien à ouvrir
+    expect(place(0.5, 1.4, -1.0)).toBe(false);    // il se laisse glisser (moins vite)
+    expect(place(0.5, 0.2, 0)).toBe(false);       // il est déjà dans la file
+    expect(place(0.5, 3.5, 0)).toBe(false);       // trop loin sur le côté
+    expect(place(8, 1.4, 0)).toBe(false);         // trop loin devant
+    expect(place(-4, 1.4, 0)).toBe(false);        // déjà derrière
+    expect(enLigne(w, r!)).toBe(true);
+  });
+  it('on se glisse vraiment au milieu du groupe : des coureurs se replacent derrière un coureur avec quelqu\'un juste derrière', () => {
+    let insertions = 0;
+    const vus = new Set<string>();
+    for (const seed of [1, 2, 3, 4]) {
+      const w = creerMonde({ seed });
+      while (w.result.statut !== 'termine' && w.t < 1200) {
+        pas(w);
+        for (const r of w.riders) for (const e of r.evenements) if (e.type === 'place-atteinte' && !e.detail && r.intent.place === 'derriere') {
+          const k = seed + ':' + r.id + '@' + e.t.toFixed(2); if (vus.has(k)) continue; vus.add(k);
+          if (w.vue.ordre.some((o) => o !== r && o.x < r.x && r.x - o.x < 6)) insertions++;
+        }
+      }
+    }
+    expect(insertions).toBeGreaterThan(20);
+  });
+  it('les courses qui calaient en développement (seeds 9, 11, 17, 18, 24, 25, 54) finissent sans neutralisation', () => {
+    for (const seed of [9, 11, 17, 18, 24, 25, 54]) { const w = simuler(creerMonde({ seed })); expect(w.result.neutralisee).toBe(false); }
+  }, 120000);
+  it('un petit groupe (4 coureurs) tourne : plusieurs coureurs mènent, personne ne reste devant tout le temps', () => {
+    let tousMenent = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const w = simuler(creerMonde({ seed, nbCoureurs: 4 }));
+      expect(w.result.statut).toBe('termine'); expect(w.result.neutralisee).toBe(false);
+      if (w.riders.filter((r) => r.stats.relaisPris > 0).length >= 3) tousMenent++;
+    }
+    expect(tousMenent).toBeGreaterThanOrEqual(3);
   }, 120000);
 });

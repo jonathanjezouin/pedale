@@ -26,3 +26,7 @@ export function palierDe(effort: number): Palier {
 
 /** « Z4 seuil · 92 % du FTP » */
 export const libellePalier = (effort: number) => { const p = palierDe(effort); return `${p.code} ${p.nom} · ${Math.round(effort * 100)} % du FTP`; };
+
+/** Plancher d'effort : haut de Z3. Sans raison supplémentaire, un coureur roule à l'effort qu'il peut tenir longtemps sans se cramer ;
+ *  en dessous (économiser, stratégie) ou au-dessus (user un rival, attaquer), il lui faut une raison. docs/v0.0.3-comportement.md §9. */
+export const PLANCHER = 0.87;
