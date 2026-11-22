@@ -7,7 +7,7 @@ import type { Archetype, Attribut, Intention } from '@pedale/sim';
 const arg = (name: string, def: string) => { const i = process.argv.indexOf('--' + name); return i >= 0 ? process.argv[i + 1]! : def; };
 const N = Number(arg('n', '300')), SEED0 = Number(arg('seed0', '1'));
 const VENT = arg('vent', 'fixe') as 'fixe' | 'face', ROUTE = arg('route', 'courbes') as 'courbes' | 'droite';
-const ARCHS = Object.keys(ARCHETYPE_LABEL) as Archetype[];
+const ARCHS: Archetype[] = ['rouleur', 'sprinteur', 'attaquant', 'opportuniste'];   // la finale du POC ; les étapes ont leur propre rapport (etape.ts)
 const pct = (a: number, b: number) => (b ? ((100 * a) / b).toFixed(0) : '0') + ' %';
 const moy = (a: number[]) => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0);
 const mediane = (a: number[]) => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)]! : 0; };

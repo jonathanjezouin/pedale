@@ -4,14 +4,17 @@
    ===================================================================== */
 
 import type { Road } from './road';
+import type { Evaluation as EvaluationParcours, Montee, Parcours } from '@pedale/parcours';
+export type { EvaluationParcours };
 
-export type Archetype = 'rouleur' | 'sprinteur' | 'attaquant' | 'opportuniste';
+export type Archetype = 'rouleur' | 'sprinteur' | 'attaquant' | 'opportuniste' | 'grimpeur';
 
 export const ARCHETYPE_LABEL: Record<Archetype, string> = {
   rouleur: 'rouleur',
   sprinteur: 'sprinteur',
   attaquant: 'attaquant',
   opportuniste: 'opportuniste',
+  grimpeur: 'grimpeur',
 };
 
 /** Les 7 intentions finales (docs/v0.0.3-comportement.md §4.6). */
@@ -134,6 +137,7 @@ export interface Rider {
   x: number; y: number; v: number; p: number;
   E: number;  // réserve d'endurance 0..1
   X: number;  // explosivité disponible 0..1
+  usure: { echelle: number; legere: boolean };   // régime d'usure de la réserve : fin d'étape du POC ou étape (docs/v0.0.5-pente.md §6)
   tSprint: number;  // secondes cumulées à un effort neuromusculaire (au-dessus de 1,25 × FTP) : la puissance maximale retombe avec elles
   // état de course
   intent: IntentState;
@@ -156,6 +160,7 @@ export interface Rider {
   cuit: boolean;
   last: Decision | null;   // dernière décision (pour l'explication)
   draft: number;           // réduction de traînée actuelle 0..0.5
+  pente: number;           // pente sous le coureur (fraction, > 0 en montée) — lue sur la route à chaque pas
   hw: number;              // vent de face ressenti (m/s, > 0 = de face) — calculé à chaque pas
   cw: number;              // vent de côté (m/s, > 0 = vient de la gauche, pousse vers la droite)
   posture: 0 | 1 | 2 | 3;  // 0 sur les cocottes, 1 en bas du cintre, 2 en danseuse, 3 écrasé de fatigue
@@ -200,7 +205,12 @@ export interface Percu {
     vus: VuAutre[];
     attaque: { id: number; letter: string; avance: number; depuis: number; vRel: number } | null;
   };
-  course: { distRestante: number; distParcourue: number; ventFace: number; ventCote: number };
+  course: {
+    distRestante: number; distParcourue: number; ventFace: number; ventCote: number;
+    pente: number;              // % ressenti sous moi (> 0 en montée)
+    penteDevant: number;        // % moyen des 400 m devant : je vois la route
+    profil: EvaluationParcours | null;  // ce qu'il reste de l'étape lu sur le profil (rafraîchi par km) ; null hors étape
+  };
   role: { objectif: 'gagner' };
   profil: { endurance: number; pointe: number; agressivite: number; experience: number };   // ce que je sais de moi
 }
@@ -234,6 +244,10 @@ export interface Interprete {
   effortRequis: number;       // l'effort que me coûterait de tenir l'allure du groupe en tête (exposé), en part du FTP
   inconfort: boolean;         // je suis à la peine : mon effort dépasse mon plancher alors que je ne mène pas
   inconfortEnTete: boolean;   // en tête, tenir l'allure du groupe me coûterait plus que mon plancher
+  terrain: 'plat' | 'montee' | 'descente';
+  colEnCours: Montee | null;  // la montée qui compte pour la finale dans laquelle je suis
+  colDevant: { distance: number; montee: Montee } | null;   // la prochaine montée qui compte, devant moi
+  budget: number;             // réserve que je pense avoir en arrivant (E − coût estimé du reste de l'étape) ; 1 hors étape
   dangerMax: number;          // 0..1 : le plus dangereux des autres, supposé
   dangerLetter: string | null;
   fractionFrais: number;      // 0..1 : part des autres qui ont l'air frais
@@ -265,6 +279,10 @@ export interface Decision {
 
 export interface Config {
   seed: number;
+  /** Une étape générée (docs/v0.0.5-pente.md) : la route porte son relief, le départ est un départ d'étape. Sans elle : fin d'étape du POC (plate, 16-24 km). */
+  parcours?: Parcours;
+  /** Composition du lot de coureurs (un archétype par coureur) ; par défaut, deux de chaque archétype du POC, ou la composition d'étape. */
+  composition?: Archetype[];
   distance: number;      // m restants au départ de la simulation
   vent: number;          // m/s : vitesse du vent
   ventMode: 'fixe' | 'face';   // fixe : direction constante dans le monde ; face : toujours de face
@@ -304,6 +322,8 @@ export interface World {
   result: Result;
   nextEventId: number;
   vInit: number;               // allure de départ (m/s)
+  tMax: number;                // durée maximale de la course (s) : garde-fou technique
+  evalCache: Record<number, EvaluationParcours>;   // lecture du reste de l'étape depuis chaque km (profil connu des coureurs)
   road: Road;
   vent: { wx: number; wy: number };   // vecteur vitesse de l'air dans le monde (m/s)
 }

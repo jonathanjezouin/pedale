@@ -9,5 +9,9 @@ export { percevoir, interpreter, evaluer, contrat, TUNE, distanceSprint, engagem
 export { observer, dangerSuppose, dispositionDe, OBS_PERIODE } from './observation';
 export { expliquer, resumeEvaluations } from './trace';
 export { mulberry32 } from './rng';
+export { aptitudes, aptitudesRelatives, typePhysique, TYPES_PHYSIQUES, REF_APTITUDES } from './calibration';
+export type { Aptitudes, TypePhysique } from './calibration';
+export { profilRestant } from './mind';
+export { COMPOSITION_ETAPE } from './scenario';
 export { ANCRAGES, NIVEAUX, VELO_KG, POINTE_REF, pointeNorm, ftpWkg, durabilitePct, niveauDe, lecture } from './calibration';
 export type { Attribut, Niveau } from './calibration';

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pédale — v0.0.4</title>
+<title>Pédale — v0.0.5</title>
 <style>
   :root { --ink:#1f2328; --paper:#fbf7ea; --paper2:#f1ead2; --line:#d9cfae; --accent:#e4572e; --good:#2f8f4e; --bad:#c2392f; --mute:#6d6a5c; }
   * { box-sizing: border-box; }
@@ -30,6 +30,10 @@
   #strip .rail { position:absolute; left:0; right:0; top:34px; height:6px; background:var(--paper2); border-radius:3px; border:1px solid var(--line); }
   #strip .brk { position:absolute; top:12px; transform:translateX(-100%); background:#fff; border:2px solid #222; border-radius:12px; padding:2px 4px; display:flex; gap:2px; }
   #strip .brk i { width:8px; height:8px; border-radius:50%; border:1px solid #222; display:block; }
+  #strip .prof { position:absolute; left:0; right:0; top:2px; height:30px; width:100%; overflow:visible; }
+  #strip .prof path { fill:rgba(120,140,100,.28); stroke:#6b7a58; stroke-width:1.2; vector-effect:non-scaling-stroke; }
+  .stat.etape { display:none; }
+  body.etape .stat.etape { display:block; }
   #strip .dot { position:absolute; width:11px; height:11px; border-radius:50%; border:2px solid #222; transform:translateX(-50%); }
   #strip .dot.sel { width:15px; height:15px; border-width:3px; margin-top:-2px; z-index:2; }
   #strip .pelo { position:absolute; top:44px; transform:translateX(-50%); background:#555; color:#fff; font-size:10px; padding:1px 7px; border-radius:4px; white-space:nowrap; }
@@ -85,11 +89,13 @@
 <body>
 <div id="stage"></div>
 <div id="hud">
-  <h1 class="card">Pédale · v0.0.4 · huit coureurs sur le plat</h1>
+  <h1 class="card" id="hTitre">Pédale · v0.0.5 · huit coureurs sur le plat</h1>
   <div class="stats">
     <div class="stat card"><small>Distance restante</small><b id="sKm">—</b></div>
     <div class="stat card"><small>Position</small><b id="sGap">—</b><small id="sGapSub" style="margin-top:2px;text-transform:none;letter-spacing:0"></small></div>
     <div class="stat card"><small>Vitesse</small><b id="sSpd">—</b></div>
+    <div class="stat card etape"><small>Altitude</small><b id="sAlt">—</b></div>
+    <div class="stat card etape"><small>Pente</small><b id="sPente">—</b><small id="sPenteSub" style="margin-top:2px;text-transform:none;letter-spacing:0"></small></div>
     <div class="stat card"><small>Vent</small><b><span id="sWind">—</span> <svg id="windArrow" width="22" height="22" viewBox="-11 -11 22 22"><path d="M-9 0H8M2 -6L8 0L2 6" fill="none" stroke="#1f2328" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></b><small id="sWindRel" style="margin-top:2px;text-transform:none;letter-spacing:0"></small></div>
     <div class="stat card"><small>Temps de course</small><b id="sT">—</b></div>
   </div>
@@ -104,6 +110,7 @@
     <button data-sp="4"><kbd>2</kbd>×4</button>
     <button data-sp="16"><kbd>3</kbd>×16</button>
     <button data-sp="64"><kbd>4</kbd>×64</button>
+    <button data-sp="256"><kbd>5</kbd>×256</button>
     <label class="chk"><input type="checkbox" id="auto" checked> Ralentir sur les événements</label>
     <label class="chk" title="Affiche le sillage de chaque coureur (touche A)"><kbd>A</kbd>Aspiration <input type="range" id="aspi" min="0" max="100" value="0" style="vertical-align:middle;width:90px"></label>
     <button id="bNew"><kbd>N</kbd>Nouvelle course</button>

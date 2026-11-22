@@ -177,7 +177,7 @@ function enGroupe(w: World, r: Rider, pMax: number, watts: (e: number) => number
       // si je n'arrive pas à doubler (le meneur est plus fort que moi), je le déclare au bout de 20 s : Vouloir réévaluera
       if (w.t - ge.phaseSince > 20 && w.t - ge.limiteT > 10) { ge.limiteT = w.t; declarer(w, r, 'limite-atteinte', 'depassement'); }
       // je passe pour mener : je vise au moins la vitesse que je veux tenir à mon effort (sinon, quand tout le groupe est à l'arrêt, je viserais 0,9 m/s)
-      const vVoulue = it.effort !== null ? vitesseSolo(watts(it.effort), r.profile.cda, r.profile.mass, r.hw) : 0;
+      const vVoulue = it.effort !== null ? vitesseSolo(watts(it.effort), r.profile.cda, r.profile.mass, r.hw, r.pente) : 0;
       return { yT: yMontant(w, r), p: Math.min(pMax, puissanceVers(Math.max(vFront + 0.9, vVoulue), r.v, r, 1.3)) };
     }
     if (ge.phase === 'monte') { ge.phase = 'garde'; declarer(w, r, 'passage-termine'); }

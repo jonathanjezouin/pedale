@@ -11,6 +11,9 @@ import { INTENTIONS, ARCHETYPE_LABEL } from './types';
 import { capf, E_CUIT, resistance, vitesseSolo, wattsPour, X_MIN } from './physics';
 import { clamp, smoothstep } from './util';
 import { abrite, enLigne } from './placement';
+import { evaluer as evaluerParcours } from '@pedale/parcours';
+import type { Evaluation as EvaluationParcours } from '@pedale/parcours';
+import { aptitudes } from './calibration';
 import { EFFORT_PHYSIQUE, PLANCHER } from './paliers';
 import { bruitDe, dangerSuppose, dispositionDe, gauss } from './observation';
 
@@ -76,7 +79,7 @@ export function effortParticiper(p: Percu, ip: Interprete, prof: { pointe: numbe
 }
 
 /** Vitesse que je tiendrais seul à cet effort (ce que je « voudrais » rouler). */
-export const vitesseVoulue = (r: Rider, effort: number) => vitesseSolo(wattsPour(r, effort), r.profile.cda, r.profile.mass, r.hw);
+export const vitesseVoulue = (r: Rider, effort: number) => vitesseSolo(wattsPour(r, effort), r.profile.cda, r.profile.mass, r.hw, r.pente);
 
 /** Effort visé et limites de l'intention choisie, place visée, roue visée. Valeurs de départ = celles du POC, à affiner à l'œil. */
 export function contrat(r: Rider, p: Percu, ip: Interprete, k: Intention, ctx: CtxContrat): Contrat {
@@ -167,6 +170,21 @@ export function contrat(r: Rider, p: Percu, ip: Interprete, k: Intention, ctx: C
   return { effort, effortMax, fatigueMax, place, cible, raisonsPlace };
 }
 
+/* ---------------------------- Le profil de l'étape, connu des coureurs ---------------------------- */
+
+/** Lecture du reste de l'étape depuis la position x (au km inférieur), mise en cache : les coureurs connaissent le road-book
+ *  (docs/v0.0.5-pente.md §2). Hors étape (fin de course du POC) : null. */
+export function profilRestant(w: World, x: number): EvaluationParcours | null {
+  const p = w.road.profilEtape;
+  if (!p) return null;
+  const k = Math.min(Math.floor(Math.max(0, x) / 1000), Math.max(0, Math.floor(w.finishX / 1000) - 1));
+  return (w.evalCache[k] ??= evaluerParcours(p, k * 1000, w.finishX));
+}
+
+/** Charge moyenne de l'usure (effort moyen au cube, abrité, avec l'effet « sous le plancher ») pour estimer le coût du reste de l'étape.
+ *  Heuristique calibrée sur des étapes simulées (docs/v0.0.5-pente.md §7). */
+const CHARGE_BUDGET = 0.6;
+
 /* ---------------------------- Percevoir ---------------------------- */
 
 export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
@@ -204,7 +222,10 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
       vus: r.vus,
       attaque,
     },
-    course: { distRestante: Math.max(0, w.finishX - r.x - 0.9), distParcourue: r.x, ventFace: r.hw, ventCote: r.cw },
+    course: {
+      distRestante: Math.max(0, w.finishX - r.x - 0.9), distParcourue: r.x, ventFace: r.hw, ventCote: r.cw,
+      pente: r.pente * 100, penteDevant: ((w.road.alt(r.x + 400) - w.road.alt(r.x)) / 400) * 100, profil: profilRestant(w, r.x),
+    },
     role: { objectif: 'gagner' },
     profil: { endurance: r.profile.tEnd, pointe: r.profile.pointe, agressivite: r.profile.agressivite, experience: r.profile.experience },
   };
@@ -260,6 +281,21 @@ export function interpreter(r: Rider, p: Percu): Interprete {
   const vAllure = Math.max(p.rivaux.allure, 1);
   const effortRequis = (resistance(vAllure, 0, r) * vAllure) / r.profile.ftp;
 
+  // le terrain et ce que le profil du reste de l'étape annonce (étape seulement : hors étape rien ne change)
+  const pente = p.course.pente;
+  const terrain: Interprete['terrain'] = pente > 2.5 ? 'montee' : pente < -2.5 ? 'descente' : 'plat';
+  const ev = p.course.profil, xPos = p.course.distParcourue;
+  let colEnCours: Interprete['colEnCours'] = null, colDevant: Interprete['colDevant'] = null, budget = 1;
+  if (ev) {
+    for (const m of ev.montees) {
+      if (m.poids < 0.1 || (m.categorie === 'bosse' && m.pente < 4.5)) continue;
+      if (m.debut <= xPos && xPos <= m.fin) colEnCours = m;
+      else if (m.debut > xPos && (!colDevant || m.debut - xPos < colDevant.distance)) colDevant = { distance: m.debut - xPos, montee: m };
+    }
+    // ce que le reste de l'étape va me coûter, d'après sa durée et mon régime d'usure ; ce qu'il me restera en arrivant
+    budget = p.moi.reserve - (ev.duree * CHARGE_BUDGET) / (r.profile.tEnd * r.usure.echelle);
+  }
+
   const tend = p.rivaux.tendanceAllure;
   const rythme: Interprete['groupe']['rythme'] = tend > 0.4 ? 'monte' : tend < -0.4 ? 'baisse' : 'stable';
   const cohesion: Interprete['groupe']['cohesion'] = p.moi.groupeTaille > 1 && p.moi.groupeEtendue / (p.moi.groupeTaille - 1) > 8 ? 'etire' : 'serre';
@@ -271,6 +307,9 @@ export function interpreter(r: Rider, p: Percu): Interprete {
   if (p.moi.groupeTaille > 1) phrases.push(`je suis dans un groupe de ${p.moi.groupeTaille}${rythme === 'baisse' ? ', l\'allure baisse' : rythme === 'monte' ? ', l\'allure monte' : ''}`);
   if (!p.moi.estEnTete && p.moi.effortRessenti > plancher + 0.03) phrases.push(`je suis à la peine (${Math.round(p.moi.effortRessenti * 100)} % du FTP, au-dessus de mon plancher de ${Math.round(plancher * 100)} %)`);
   if (p.moi.estEnTete) phrases.push(effortRequis <= plancher + 0.05 ? `tenir cette allure en tête me coûte ${Math.round(effortRequis * 100)} % du FTP : dans mon plancher` : `tenir cette allure en tête me coûterait ${Math.round(effortRequis * 100)} % du FTP, au-dessus de mon plancher de ${Math.round(plancher * 100)} %`);
+  if (terrain !== 'plat') phrases.push(terrain === 'montee' ? `je suis en montée (${pente.toFixed(1).replace('.', ',')} %)` : `je suis en descente (${pente.toFixed(1).replace('.', ',')} %)`);
+  if (colDevant) phrases.push(`une montée qui compte arrive dans ${(colDevant.distance / 1000).toFixed(1).replace('.', ',')} km (${(colDevant.montee.longueur / 1000).toFixed(0)} km à ${colDevant.montee.pente.toFixed(1).replace('.', ',')} %)`);
+  if (budget < 0.2) phrases.push(`ma réserve ne suffira pas pour le reste de l'étape`);
   if (position === 'decroche') phrases.push(`je suis décroché (${Math.round(p.moi.ecartDevant)} m)`);
   else if (position === 'premier') phrases.push('je suis en tête de la course');
   else if (p.moi.estEnTete) phrases.push('je suis en tête de mon groupe');
@@ -283,7 +322,7 @@ export function interpreter(r: Rider, p: Percu): Interprete {
     forme, explosivite, distance, position, placement: p.moi.abrite > 0.12 ? 'abrite' : 'expose',
     reserveBasse: clamp((0.45 - E) / 0.35, 0, 1), explosiviteBasse: clamp((0.6 - X) / 0.4, 0, 1),
     excesRelais, rasLeBol, sprintFocus, autres, groupe: { taille: p.moi.groupeTaille, rythme, cohesion },
-    plancher, effortRequis, inconfort: !p.moi.estEnTete && p.moi.effortRessenti > plancher + 0.03,
+    terrain, colEnCours, colDevant, budget, plancher, effortRequis, inconfort: !p.moi.estEnTete && p.moi.effortRessenti > plancher + 0.03,
     inconfortEnTete: p.moi.estEnTete && effortRequis > plancher + 0.05,
     dangerMax, dangerLetter, fractionFrais, avanceSurVus, phrases,
   };
@@ -301,6 +340,10 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
   const cuit = p.moi.reserve < E_CUIT;
   const sansExplosif = p.moi.explosivite < X_MIN;
   const enTete = p.moi.estEnTete;
+  // terrain : la côte qui compte et ma réserve pour le reste de l'étape (sans effet hors étape)
+  const budgetBas = clamp((0.2 - it.budget) / 0.3, 0, 1);
+  const poidsCol = it.colEnCours?.poids ?? 0;
+  const aptMontagne = aptitudes(prof).montagne / 5.86;
   for (const k of INTENTIONS) {
     const raisons: Raison[] = [];
     const vetos: string[] = [];
@@ -312,6 +355,7 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         mk(raisons, 'forces', 'Je veux garder des forces pour la fin', (1.5 + 1.5 * it.sprintFocus) * smoothstep(500, 2500, d));
         mk(raisons, 'reserve', 'Ma réserve est basse', 4 * it.reserveBasse);
         mk(raisons, 'dejaRoule', "J'ai déjà roulé plus que ce que j'ai vu des autres", 2.5 * it.excesRelais);
+        mk(raisons, 'budget', "Ma réserve ne suffira pas pour le reste de l'étape : j'économise", 3 * budgetBas);
         if (enTete) {
           mk(raisons, 'reculer', 'Je suis devant : pour m\'abriter il faut que je recule', -0.5);
           mk(raisons, 'inconfort', `Mener à cette allure me coûterait ${Math.round(it.effortRequis * 100)} % du FTP, au-dessus de mon plancher de ${Math.round(it.plancher * 100)} %`, 3.0 * clamp((it.effortRequis - it.plancher) / 0.1, 0, 1));
@@ -325,6 +369,7 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         if (p.moi.rangDansGroupe <= 1) vetos.push('Je suis déjà aux avant-postes de mon groupe');
         if (p.rivaux.attaque) vetos.push(`${p.rivaux.attaque.letter} attaque : ça part, trop tard pour se placer`);
         mk(raisons, 'proche', "L'arrivée approche : je veux être bien placé", 4 * (1 - smoothstep(1500, 6000, d)));
+        if (it.colDevant) mk(raisons, 'col', `Une montée qui compte arrive dans ${(it.colDevant.distance / 1000).toFixed(1).replace('.', ',')} km : je veux être bien placé à son pied`, 2.5 * it.colDevant.montee.poids * (1 - smoothstep(1500, 4000, it.colDevant.distance)));
         mk(raisons, 'danger', `${it.dangerLetter ?? 'Un rival'} est dangereux : je reste près de l'avant`, 1.0 * it.dangerMax);
         mk(raisons, 'sprint', 'Mon sprint se joue sur la position', 1.5 * it.sprintFocus * (1 - smoothstep(1000, 5000, d)));
         mk(raisons, 'reserve', 'Ma réserve est basse', -3 * it.reserveBasse);
@@ -349,6 +394,7 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         }
         mk(raisons, 'reserve', 'Ma réserve est basse', -4.5 * it.reserveBasse);
         mk(raisons, 'rasLeBol', "Je suis presque le seul à rouler depuis longtemps", -4.5 * it.rasLeBol);
+        mk(raisons, 'budget', "Ma réserve ne suffira pas pour le reste de l'étape", -3 * budgetBas);
         break;
       }
       case 'attaquer': {
@@ -369,7 +415,10 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         if (it.dangerMax > 0.2)
           mk(raisons, 'sprinteur', `${it.dangerLetter} a l'air dangereux`, 1.0 * clamp((it.dangerMax - prof.pointe) / 0.3, 0, 1));
         mk(raisons, 'explosivite', "Mon explosivité est basse", -5 * it.explosiviteBasse);
-        mk(raisons, 'tropTot', 'Trop tôt : il reste trop de kilomètres', -4 * clamp((d - dmax) / dmax, 0, 1));
+        // « trop tôt » vaut moins quand on est dans la montée qui décide de la finale
+        mk(raisons, 'tropTot', 'Trop tôt : il reste trop de kilomètres', -4 * clamp((d - dmax) / dmax, 0, 1) * (1 - 0.8 * poidsCol));
+        if (it.colEnCours && p.course.pente >= 3) mk(raisons, 'col', `Je suis dans la montée qui compte (${it.colEnCours.pente.toFixed(1).replace('.', ',')} %) et la côte est mon terrain`, 3 * poidsCol * clamp((aptMontagne - 0.98) / 0.1, 0, 1));
+        mk(raisons, 'budget', "Ma réserve ne suffira pas pour le reste de l'étape", -2 * budgetBas);
         mk(raisons, 'peuFrais', 'Trop de coureurs ont encore l\'air frais pour que ça passe', -2 * it.fractionFrais);
         mk(raisons, 'dejaEssaye', "Je viens déjà d'essayer", -4.5 * dernier);
         if (r.intent.kind === 'attaquer' && !r.intent.sprint) {

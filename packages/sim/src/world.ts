@@ -22,6 +22,7 @@ function instantane(w: World) {
   const actifs = w.riders.filter((r) => r.status === 'course').sort((a, b) => b.x - a.x);
   // vent relatif de chaque coureur : le vent est fixe dans le monde, la route tourne
   for (const r of actifs) {
+    r.pente = w.road.pente(r.x);
     if (w.cfg.ventMode === 'face') { r.hw = w.cfg.vent; r.cw = 0; continue; }
     const h = w.road.heading(r.x), hx = Math.cos(h), hy = Math.sin(h);
     r.hw = -(w.vent.wx * hx + w.vent.wy * hy);
@@ -163,11 +164,15 @@ function physique(w: World) {
   const cmds = act.map((r) => ({ r, c: agir(w, r) }));
   for (const { r, c } of cmds) {
     const pFrein = -r.profile.mass * Math.max(r.v, 2) * FREINAGE_MAX;
-    const pRaw = clamp(c.p, pFrein, capExplosif(r));     // < 0 : freinage
+    // descente : la route limite la vitesse (virages, ligne droite), freinage anticipé compris (docs/v0.0.5-pente.md §4) ; à la limite on ne pédale plus
+    const vLim = w.road.vitesseMax(r.x);
+    const aLaLimite = r.v >= vLim - 0.15;
+    const pRaw = aLaLimite ? Math.min(0, clamp(c.p, pFrein, capExplosif(r))) : clamp(c.p, pFrein, capExplosif(r));     // < 0 : freinage
     const p = Math.max(0, pRaw);
     // bilan de forces : m·a = P/v − F
     const acc = (pRaw / Math.max(r.v, 2) - resistance(r.v, r.draft, r)) / r.profile.mass;
     r.v = Math.max(0, r.v + acc * dt);
+    if (r.v > vLim) r.v = Math.max(vLim, r.v - FREINAGE_MAX * dt);          // la limite de vitesse se tient en freinant
     // vitesse sol → avancement le long de la ligne centrale : à l'intérieur d'un virage on parcourt moins de distance
     r.x += (r.v * dt) / Math.max(0.5, 1 - w.road.courbure(r.x) * r.y);
     // posture visible (cocottes / bas du cintre / danseuse / écrasé), avec un temps minimal entre deux changements
@@ -207,7 +212,7 @@ function physique(w: World) {
 /* ------------------------ arrivée ------------------------ */
 const DELAI_FIN = 90;   // s après le vainqueur : la course est déclarée finie, les derniers sont classés selon leur position
 /** Garde-fou technique (ce n'est pas du comportement) : durée maximale d'une course, au-delà de laquelle elle est arrêtée et classée selon la position. */
-export const dureeMax = (distance: number) => distance / 5 + 300;
+export const dureeMax = (distance: number, dureeEstimee = 0) => Math.max(distance / 5, 2.5 * dureeEstimee) + 300;
 
 function arrivees(w: World) {
   for (const r of w.vue.ordre) {
@@ -220,7 +225,7 @@ function arrivees(w: World) {
   }
   const enCourse = w.riders.filter((r) => r.status === 'course');
   const tVainqueur = w.result.ordre.length ? w.riders[w.result.ordre[0]!]!.finishTime! : null;
-  const trop = w.t > dureeMax(w.finishX);
+  const trop = w.t > w.tMax;
   if (!enCourse.length || (tVainqueur !== null && w.t - tVainqueur > DELAI_FIN) || trop) {
     if (trop && enCourse.length) { w.result.neutralisee = true; evt(w, 'arrivee', null, 'Course neutralisée : plus personne n\'avance', true); }
     // les retardataires sont classés selon leur position, avec un temps d'arrivée estimé
@@ -244,7 +249,7 @@ export function pas(w: World): void {
   arrivees(w);
 }
 
-export function simuler(w: World, tMax = 7200): World {
+export function simuler(w: World, tMax = w.tMax + 600): World {
   while (w.result.statut !== 'termine' && w.t < tMax) pas(w);
   return w;
 }

@@ -1,5 +1,14 @@
 # Journal des versions
 
+## v0.0.5 — pente dans la simulation
+- **Gravité** : la pente entre dans la résistance, la vitesse tenable et le dépassement ; `Road` porte altitude, pente, vitesse maximale en descente (courbure et freinage) et profil d'étape, construits depuis un parcours (`creerRouteDepuisParcours`).
+- **Départ d'étape** : énergie pleine, départ en paquet à 7,5 m/s ; deux régimes d'usure (finale POC inchangée, étape : usure ×6 plus lente et coût réduit sous le plancher) ; durée maximale et fin de simulation garanties.
+- **Perception et interprétation** : pente, pente devant, profil du reste de l'étape (évalué par `evaluer()`, mis en cache par km) ; terrain, col en cours / devant, budget de l'étape ; raisons « budget » et « col ».
+- **Aptitudes** par terrain et **types physiques** calculés ; archétype **grimpeur** et composition d'étape.
+- **Jeu** : `?etape=montagne&km=150`, touche `E`, vitesse ×256, altitude/pente, profil altimétrique. **Outil** : `npm run etapes`.
+- Validation (30 étapes de 100 km) : grimpeurs vainqueurs 10 / 33 / 50 % (plate / vallonnée / montagne), peloton étiré de 5 s (plat) à 241 s (montagne) en côte, 0 étape neutralisée. Défaut trouvé : CdA trop bas des grimpeurs (53 % des étapes plates) ; corrigé. Limites : sprinteur toujours faible, fatigue d'étape distincte (v0.0.7). Détail : `docs/v0.0.5-pente.md`.
+- Tests : 55 → 77 pour la simulation, 33 pour le parcours.
+
 ## v0.0.4 — module de parcours
 - **`packages/parcours`** : `genererParcours({ seed, distance, type })` (profil altimétrique et tracé en plan, étape en ligne de 20 à 250 km, plate / vallonnée / montagne, finale tirée selon le type) et **`evaluer(profil, de, à, arrivée)`** (fonction pure : montées détectées et classées HC à 4e, poids selon la distance à l'arrivée, probabilités sprint / puncheur / grimpeur, usure, durée estimée, phrase lisible). Indépendant de la simulation, pas encore branché sur la course.
 - Le nombre d'éléments se déduit du D+ visé donc de la distance (un col sur 20 km, trois ou plus sur 250 km) ; col décisif dans les 40 derniers km en montagne ; pentes bornées, raccords arrondis ; contrôle par l'évaluateur avec retirage (10 essais).

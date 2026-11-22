@@ -1,4 +1,6 @@
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { genererParcours, LIBELLE_TYPE, TYPES } from '@pedale/parcours';
+import type { TypeEtape } from '@pedale/parcours';
 import { ASPIRATION, aspirationValeur, creerMonde, pas, RIDER_LEN, tanVent } from '@pedale/sim';
 import type { World } from '@pedale/sim';
 import { BIOMES, BIOME_KEYS, PX_PER_M, Scenery, TILE } from './scenery';
@@ -13,6 +15,9 @@ let seed = Number(qs.get('seed') ?? 20260);
 let biome: BiomeKey = (BIOME_KEYS as string[]).includes(qs.get('biome') ?? '') ? (qs.get('biome') as BiomeKey) : 'prairie';
 let ventMode: 'fixe' | 'face' = qs.get('vent') === 'face' ? 'face' : 'fixe';
 let route: 'courbes' | 'droite' = qs.get('route') === 'droite' ? 'droite' : 'courbes';
+// étape générée (docs/v0.0.5-pente.md) : ?etape=montagne&km=150 ; sans ce paramètre, la fin d'étape plate du POC
+let etape: TypeEtape | null = (TYPES as readonly string[]).includes(qs.get('etape') ?? '') ? (qs.get('etape') as TypeEtape) : null;
+const kmEtape = Math.min(250, Math.max(20, Number(qs.get('km') ?? 100)));
 
 const stageEl = document.getElementById('stage')!;
 const app = new Application();
@@ -65,7 +70,10 @@ function setupRiders() {
 function pos(s: number, d: number) { const p = W.road.toXY(s, d); return { x: p.x * PX_PER_M, y: p.y * PX_PER_M, h: p.heading }; }
 
 function newWorld(s: number) {
-  seed = s; W = creerMonde({ seed, trace: 'changements', ventMode, route });
+  seed = s;
+  W = creerMonde({ seed, trace: 'changements', ventMode, route, ...(etape ? { parcours: genererParcours({ seed, distance: kmEtape * 1000, type: etape }) } : {}) });
+  document.body.classList.toggle('etape', !!etape);
+  document.getElementById('hTitre')!.textContent = etape ? `Pédale · v0.0.5 · huit coureurs, étape ${LIBELLE_TYPE[etape].toLowerCase()} de ${kmEtape} km` : 'Pédale · v0.0.5 · huit coureurs sur le plat';
   scenery = new Scenery(W.road, { seed, biome, finishS: W.finishX });
   prev = W.riders.map((r) => ({ x: r.x, y: r.y })); acc = 0; eventPtr = 0; ended = false; hideEnd();
   document.getElementById('feed')!.innerHTML = '';
@@ -76,7 +84,7 @@ function newWorld(s: number) {
   document.getElementById('routeName')!.textContent = route === 'courbes' ? 'Route qui tourne' : 'Route droite';
   buildRiders(W, (id) => { select(id); });
   const c = pos(W.vue.xMoyen || 0, 0); cam.x = c.x; cam.y = c.y; cam.rot = c.h; cam.vx = cam.vy = 0;
-  const url = new URL(location.href); url.searchParams.set('seed', String(seed)); url.searchParams.set('biome', biome); url.searchParams.set('vent', ventMode); url.searchParams.set('route', route); history.replaceState(null, '', url);
+  const url = new URL(location.href); url.searchParams.set('seed', String(seed)); url.searchParams.set('biome', biome); url.searchParams.set('vent', ventMode); url.searchParams.set('route', route); if (etape) { url.searchParams.set('etape', etape); url.searchParams.set('km', String(kmEtape)); } else { url.searchParams.delete('etape'); url.searchParams.delete('km'); } history.replaceState(null, '', url);
   for (let i = 0; i < 2; i++) pas(W);
   eventPtr = 0;
 }
@@ -240,7 +248,8 @@ document.getElementById('bRoute')!.onclick = toggleRoute;
 window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).tagName === 'INPUT') return;
   if (e.key === ' ') { setSpeed(paused ? timeScale : 0); e.preventDefault(); }
-  else if (e.key === '1') setSpeed(1); else if (e.key === '2') setSpeed(4); else if (e.key === '3') setSpeed(16); else if (e.key === '4') setSpeed(64);
+  else if (e.key === '1') setSpeed(1); else if (e.key === '2') setSpeed(4); else if (e.key === '3') setSpeed(16); else if (e.key === '4') setSpeed(64); else if (e.key === '5') setSpeed(256);
+  else if (e.key === 'e' || e.key === 'E') { const o: (TypeEtape | null)[] = [null, 'plate', 'vallonnee', 'montagne']; etape = o[(o.indexOf(etape) + 1) % o.length]!; newWorld(seed); }
   else if (e.key === 'n' || e.key === 'N') nextSeed(); else if (e.key === 'b' || e.key === 'B') nextBiome();
   else if (e.key === 'a' || e.key === 'A') toggleAspi();
   else if (e.key === 'v' || e.key === 'V') toggleVent(); else if (e.key === 'r' || e.key === 'R') toggleRoute();

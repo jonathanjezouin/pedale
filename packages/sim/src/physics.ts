@@ -1,5 +1,6 @@
 import type { Rider } from './types';
 import { clamp } from './util';
+import { PLANCHER } from './paliers';
 
 /** Physique simplifiée mais honnête : traînée aérodynamique (avec aspiration), roulement, bilan de forces. */
 export const RHO = 1.2;
@@ -11,6 +12,12 @@ export const MAX_LAT_SPEED = 1.0;   // m/s
 export const LAT_ACCEL = 1.3;       // m/s² : un coureur ne change pas de trajectoire d'un coup
 export const LAT_TAU = 0.7;         // s : constante de temps du filtre de consigne latérale
 export const FREINAGE_MAX = 2.5;    // m/s² de décélération par les freins
+/** Deux régimes d'usure de la réserve d'endurance (docs/v0.0.5-pente.md §6).
+ *  - fin d'étape du POC : calibrée sur 35 minutes de course (usure en 1/tEnd, en cube de l'effort), conservée telle quelle ;
+ *  - étape : sur 4-5 h, la durabilité gouverne. L'usure est 6 fois plus lente et, sous le plancher, elle chute encore (× (effort / plancher)³) :
+ *    5 h à 55 % du FTP ne vident pas la réserve. Recalage commun prévu avec la durabilité (v0.0.7). */
+export const USURE_FINALE = { echelle: 1, legere: false } as const;
+export const USURE_ETAPE = { echelle: 6, legere: true } as const;
 export const E_CUIT = 0.12;         // seuil « sans réserve » (§6.3 Veto)
 export const X_MIN = 0.15;          // explosivité minimale pour attaquer / suivre
 
@@ -45,7 +52,13 @@ export function wattsPour(r: Rider, effort: number): number {
 export function resistance(v: number, draft: number, r: Rider): number {
   const along = v + r.hw;
   const air = Math.sqrt(along * along + r.cw * r.cw);
-  return 0.5 * RHO * r.profile.cda * (1 - draft) * air * along + CRR * r.profile.mass * G;
+  return 0.5 * RHO * r.profile.cda * (1 - draft) * air * along + forcePenteRoulement(r.pente, r.profile.mass);
+}
+
+/** Roulement et gravité sur une pente `g` (fraction, > 0 en montée) : m·g·(Crr·cos θ + sin θ). Négative en descente raide : la gravité pousse (docs/v0.0.5-pente.md §3). */
+export function forcePenteRoulement(g: number, mass: number): number {
+  const n = Math.sqrt(1 + g * g);
+  return mass * G * (CRR / n + g / n);
 }
 
 /** Puissance nécessaire pour tenir `vTarget` en partant de `v` (bilan de forces + accélération demandée).
@@ -57,12 +70,13 @@ export function puissanceVers(vTarget: number, v: number, r: Rider, aMax = 1.2, 
 }
 
 /** Vitesse d'équilibre en solo pour une puissance donnée (bissection). */
-export function vitesseSolo(power: number, cda: number, mass: number, vent: number): number {
+export function vitesseSolo(power: number, cda: number, mass: number, vent: number, pente = 0): number {
   let lo = 0, hi = 30;
+  const fPente = forcePenteRoulement(pente, mass);
   for (let i = 0; i < 40; i++) {
     const mid = (lo + hi) / 2;
     const air = Math.max(0, mid + vent);
-    const p = (0.5 * RHO * cda * air * air + CRR * mass * G) * mid;
+    const p = (0.5 * RHO * cda * air * air + fPente) * mid;
     if (p > power) hi = mid; else lo = mid;
   }
   return (lo + hi) / 2;
@@ -111,7 +125,9 @@ export function consommer(r: Rider, p: number, dt: number): void {
   const ftp = r.profile.ftp;
   if (p > SPRINT.seuil * ftp) r.tSprint += dt; else r.tSprint = Math.max(0, r.tSprint - SPRINT.recup * dt);
   const ratio = Math.min(p / ftp, 1.3);
-  r.E = clamp(r.E - (ratio * ratio * ratio * dt) / r.profile.tEnd, 0, 1);
+  // usure en cube de l'effort ; sous le plancher elle chute encore (coût × (effort / plancher)³) : 5 h à 55 % du FTP ne vident pas la réserve (docs/v0.0.5-pente.md §6)
+  const leger = r.usure.legere && ratio < PLANCHER ? Math.pow(ratio / PLANCHER, 3) : 1;
+  r.E = clamp(r.E - (ratio * ratio * ratio * leger * dt) / (r.profile.tEnd * r.usure.echelle), 0, 1);
   if (p > ftp) {
     r.X = clamp(r.X - ((p - ftp) * dt) / r.profile.wPrime, 0, 1);
   } else {

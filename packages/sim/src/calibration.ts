@@ -67,3 +67,41 @@ export function lecture(p: Profile) {
   const niveaux = Object.fromEntries((Object.keys(v) as Attribut[]).map((k) => [k, niveauDe(k, v[k])])) as Record<Attribut, Niveau>;
   return { valeurs: v, niveaux };
 }
+
+/* --------------------- aptitudes par terrain et type physique (docs/v0.0.5-pente.md §8) --------------------- */
+
+/** Les quatre aptitudes d'un coureur (jamais stockées, toujours calculées depuis les attributs moteur et le gabarit). */
+export interface Aptitudes { montagne: number; plat: number; punch: number; sprint: number }
+export type TypePhysique = 'grimpeur' | 'rouleur' | 'puncheur' | 'sprinteur';
+export const TYPES_PHYSIQUES: readonly TypePhysique[] = ['grimpeur', 'rouleur', 'puncheur', 'sprinteur'];
+
+export function aptitudes(p: Pick<Profile, 'ftp' | 'cda' | 'mass' | 'wPrime' | 'pPeak'>): Aptitudes {
+  const coureur = p.mass - VELO_KG;
+  return {
+    montagne: p.ftp / coureur,          // FTP en W/kg : la côte longue
+    plat: p.ftp / p.cda,                 // FTP / CdA (W/m²) : contre le vent, à plat
+    punch: p.wPrime / coureur,           // W′ / masse (J/kg) : la côte courte, la relance
+    sprint: p.pPeak / coureur,           // pointe / masse (W/kg) : le final
+  };
+}
+
+/** Moyenne et écart-type de chaque aptitude dans un peloton WorldTour de la composition d'étape (mesurés sur 2 000 coureurs générés par la composition d'étape). */
+export const REF_APTITUDES: Record<keyof Aptitudes, { moy: number; sd: number }> = {
+  montagne: { moy: 5.86, sd: 0.32 }, plat: { moy: 1194, sd: 65 }, punch: { moy: 341, sd: 43 }, sprint: { moy: 21.4, sd: 3.2 },
+};
+const CORRESPONDANCE: Record<keyof Aptitudes, TypePhysique> = { montagne: 'grimpeur', plat: 'rouleur', punch: 'puncheur', sprint: 'sprinteur' };
+
+/** Écart de chaque aptitude à la moyenne du peloton, en écarts-types. */
+export function aptitudesRelatives(p: Pick<Profile, 'ftp' | 'cda' | 'mass' | 'wPrime' | 'pPeak'>): Aptitudes {
+  const a = aptitudes(p);
+  const z = (k: keyof Aptitudes) => (a[k] - REF_APTITUDES[k].moy) / REF_APTITUDES[k].sd;
+  return { montagne: z('montagne'), plat: z('plat'), punch: z('punch'), sprint: z('sprint') };
+}
+
+/** Type physique : l'aptitude où le coureur ressort le mieux *relativement au peloton*. */
+export function typePhysique(p: Pick<Profile, 'ftp' | 'cda' | 'mass' | 'wPrime' | 'pPeak'>): TypePhysique {
+  const z = aptitudesRelatives(p);
+  let best: keyof Aptitudes = 'montagne';
+  for (const k of Object.keys(z) as (keyof Aptitudes)[]) if (z[k] > z[best]) best = k;
+  return CORRESPONDANCE[best];
+}

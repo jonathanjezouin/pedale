@@ -14,10 +14,11 @@ Jeu de cyclisme sur route, vue 100 % de dessus. On incarne un seul coureur, de l
 - **Plan de développement jusqu'à la v0.1.0** : [`docs/v0.1.0-plan.md`](docs/v0.1.0-plan.md)
 - POC graphique initial (HTML seul) : [`docs/poc-graphique/`](docs/poc-graphique/index.html)
 
-## v0.0.4 — huit coureurs sur le plat, raisonnement individuel ; module de parcours
+## v0.0.5 — huit coureurs, une étape avec relief ; raisonnement individuel ; module de parcours
 
 Huit coureurs qui s'affrontent, chacun pour soi, sur une route qui tourne avec un vent fixe (pas de peloton poursuivant ; des groupes se forment, c'est tout). Chaque coureur
 raisonne par étages — **percevoir → interpréter → vouloir → agir** — avec 7 intentions (s'abriter, se placer, participer, attaquer, suivre, revenir, gérer) et des raisons nommées ; il ne connaît pas les autres, il les déduit de ce qu'il voit.
+Sur une **étape générée** (plate, vallonnée ou montagne, 20 à 250 km), la route porte son relief : la pente entre dans le bilan de forces, l'abri s'effondre en côte, la descente est limitée par la route, le coureur connaît le profil devant lui. Sans étape, c'est la fin d'étape plate du POC.
 Cliquer un coureur (ou `Tab`) affiche **pourquoi** il fait ce qu'il fait.
 
 ### Lancer
@@ -28,14 +29,15 @@ npm run dev          # jeu dans le navigateur : http://localhost:5173  (?seed=12
 npm test             # tests du cœur de simulation (Vitest)
 npm run atelier      # atelier de parcours : http://localhost:5174  (?km=150&type=montagne&finale=descente&seed=7)
 npm run parcours -- --n 1000   # validation du générateur de parcours : 1 000 étapes par type
+npm run etapes -- --n 30 --km 100   # 30 étapes courues par type : durées, étirement en côte, abri, vainqueurs par profil et par type physique
 npm run batch -- --n 500    # 500 courses sans affichage + critères de réussite (§6.6) ; --vent face --route droite pour l'ancien mode
 npm run build        # build web (apps/game/dist)
 npm run electron     # build + fenêtre Electron
 npm run dist         # installeur Windows (electron-builder) — à lancer sous Windows
 ```
 
-Raccourcis : `Espace` pause · `1-4` vitesse ×1/×4/×16/×64 · `Tab` coureur suivant · `←` `→` coureur devant / derrière au classement · `N` nouvelle course · `B` biome · `A` aspiration (curseur) · `V` vent fixe / de face · `R` route qui tourne / droite · molette = zoom.
-Paramètres d'URL : `?seed=1234&biome=desert&vent=face&route=droite`. **Relecture** : `?seed=9&t=1200&pause=1` ouvre la course 9 à 20 min, en pause (puis `Espace` / `1` pour la regarder, `Tab` / `←` `→` pour choisir un coureur et lire « pourquoi ? »).
+Raccourcis : `Espace` pause · `1-5` vitesse ×1/×4/×16/×64/×256 · `E` étape (aucune → plate → vallonnée → montagne) · `Tab` coureur suivant · `←` `→` coureur devant / derrière au classement · `N` nouvelle course · `B` biome · `A` aspiration (curseur) · `V` vent fixe / de face · `R` route qui tourne / droite · molette = zoom.
+Paramètres d'URL : `?seed=1234&biome=desert&vent=face&route=droite`. **Étape** : `?etape=montagne&km=150&seed=7` (en attendant le menu de la v0.0.6). **Relecture** : `?seed=9&t=1200&pause=1` ouvre la course 9 à 20 min, en pause (puis `Espace` / `1` pour la regarder, `Tab` / `←` `→` pour choisir un coureur et lire « pourquoi ? »).
 
 ### Organisation
 

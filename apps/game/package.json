@@ -1,6 +1,6 @@
 {
   "name": "@pedale/game",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "type": "module",
   "description": "Pédale — client de jeu (rendu PixiJS + interface HTML, empaqueté avec Electron pour Steam)",
@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@pedale/sim": "*",
-    "pixi.js": "^8.9.0"
+    "pixi.js": "^8.9.0",
+    "@pedale/parcours": "*"
   },
   "devDependencies": {
     "vite": "^7.0.0",

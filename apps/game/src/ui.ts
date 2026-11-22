@@ -1,5 +1,5 @@
 /* Interface HTML : fil de course, liste des coureurs, explication « pourquoi ? », fin de course. */
-import { ARCHETYPE_LABEL, INTENTION_LABEL, NIVEAUX, PLACE_LABEL, expliquer, ftpWkg, libellePalier, niveauDe, palierDe, resumeEvaluations } from '@pedale/sim';
+import { ARCHETYPE_LABEL, INTENTION_LABEL, NIVEAUX, PLACE_LABEL, expliquer, ftpWkg, libellePalier, niveauDe, palierDe, resumeEvaluations, typePhysique } from '@pedale/sim';
 import type { Intention, Rider, SimEvent, World } from '@pedale/sim';
 import { PALETTES } from './riders';
 
@@ -26,6 +26,12 @@ export function updateHud(w: World, sel: number) {
   const dev = pos > 0 ? w.riders[rk[pos - 1]!]! : null;
   $('sGapSub').textContent = rs.status === 'arrive' ? 'arrivé' : dev ? `à ${Math.max(0, Math.round(dev.x - rs.x))} m de ${dev.letter}` : 'en tête de la course';
   $('sSpd').textContent = `${(rs.v * 3.6).toFixed(1)} km/h`;
+  if (w.road.profilEtape) {
+    $('sAlt').textContent = `${Math.round(w.road.alt(rs.x))} m`;
+    const pp = rs.pente * 100;
+    $('sPente').textContent = `${pp > 0 ? '+' : ''}${pp.toFixed(1).replace('.', ',')} %`;
+    $('sPenteSub').textContent = pp > 2.5 ? 'en montée' : pp < -2.5 ? 'en descente' : 'à plat';
+  }
   const lead = g.ordre[0];
   $('sWind').textContent = `${w.cfg.vent.toFixed(1)} m/s`;
   if (lead) {
@@ -98,7 +104,7 @@ export function updateTrace(w: World, id: number) {
   el.innerHTML = `
     <h2><span>Pourquoi ?</span><span class="muted">décision de ${fmtT(d.t)} · ${d.declencheur}</span></h2>
     <div class="who">Coureur ${r.letter}, ${ARCHETYPE_LABEL[r.archetype]}</div>
-    <div class="muted">à ${fmtKm(d.distRestante)} de l'arrivée · FTP ${ftpWkg(r.profile).toFixed(1).replace('.', ',')} W/kg (${NIVEAUX[niveauDe('ftp', ftpWkg(r.profile))]}) · pointe ${Math.round(r.profile.pPeak)} W</div>
+    <div class="muted">à ${fmtKm(d.distRestante)} de l'arrivée · FTP ${ftpWkg(r.profile).toFixed(1).replace('.', ',')} W/kg (${NIVEAUX[niveauDe('ftp', ftpWkg(r.profile))]}) · pointe ${Math.round(r.profile.pPeak)} W · type physique : ${typePhysique(r.profile)}</div>
     <div class="sec"><b>Perçu</b><div class="pills">${pills.map((t) => `<span>${t}</span>`).join('')}</div>
       <div class="muted">Réel : réserve ${Math.round(d.reel.reserve * 100)} % — le coureur la ressent à ${Math.round(p.moi.reserve * 100)} % (approximatif).</div></div>
     <div class="sec"><b>Interprété</b>${cap(it.phrases.join(', '))}.</div>
@@ -135,6 +141,15 @@ export function pushFeed(e: SimEvent) {
 export function updateStrip(w: World, sel: number) {
   const el = $('strip');
   if (!el.querySelector('.track')) el.innerHTML = '<div class="track"><div class="rail"></div><div id="dots"></div><div class="lab l0">départ</div><div class="lab l1" id="stripKm"></div></div><div class="flag">🏁</div>';
+  // étape : le profil altimétrique derrière la bande de progression (une seule fois par course)
+  if (w.road.profilEtape && !el.querySelector('.prof')) {
+    const p = w.road.profilEtape; let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < p.n; i++) { mn = Math.min(mn, p.alt[i]!); mx = Math.max(mx, p.alt[i]!); }
+    const pas = Math.max(1, Math.floor(p.n / 400)); let d = `M0,100`;
+    for (let i = 0; i < p.n; i += pas) d += ` L${((i / (p.n - 1)) * 100).toFixed(2)},${(100 - ((p.alt[i]! - mn) / Math.max(1, mx - mn)) * 100).toFixed(1)}`;
+    d += ' L100,100 Z';
+    el.querySelector('.track')!.insertAdjacentHTML('afterbegin', `<svg class="prof" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="${d}"></path></svg>`);
+  }
   const L = w.finishX, pct = (x: number) => `${Math.max(0, Math.min(1, x / L)) * 100}%`;
   const rk = classement(w);
   $('dots').innerHTML = w.riders.map((r) => {
