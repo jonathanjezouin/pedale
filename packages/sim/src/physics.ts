@@ -17,15 +17,21 @@ export const X_MIN = 0.15;          // explosivité minimale pour attaquer / sui
 /** Part de la puissance disponible en soutenu selon la réserve d'endurance. */
 export const capf = (E: number) => 0.62 + 0.38 * clamp(E / 0.4, 0, 1);
 
-export const capSoutenu = (r: Rider) => r.profile.cp * capf(r.E);
+export const capSoutenu = (r: Rider) => r.profile.ftp * capf(r.E);
 
-/** Puissance maximale utilisable en effort explosif (au-dessus de cp, limitée par l'explosivité restante). */
+/** Puissance maximale utilisable en effort explosif (au-dessus du FTP, limitée par l'explosivité restante). */
 export function capExplosif(r: Rider): number {
   const s = capSoutenu(r);
   if (r.X < 0.02) return s;
   const k = Math.pow(clamp(r.X / 0.3, 0, 1), 0.6);
   const fE = 0.85 + 0.15 * clamp(r.E / 0.3, 0, 1);
-  return Math.max(s, r.profile.cp + (r.profile.pPeak * fE - r.profile.cp) * k);
+  return Math.max(s, r.profile.ftp + (r.profile.pPeak * fE - r.profile.ftp) * k);
+}
+
+/** Conversion d'un effort (part du FTP) en watts : ce que le coureur vise, borné par ce que la physique lui permet
+ *  (réserve d'endurance en dessous du FTP, explosivité au-dessus). C'est le « geste » d'Agir ; le choix de l'effort est dans Vouloir. */
+export function wattsPour(r: Rider, effort: number): number {
+  return Math.min(effort * r.profile.ftp, effort > 1 ? capExplosif(r) : capSoutenu(r));
 }
 
 /** Force de résistance à vitesse v avec une réduction de traînée `draft` (aspiration).
@@ -60,42 +66,50 @@ export function vitesseSolo(power: number, cda: number, mass: number, vent: numb
 /** Tangente de l'angle du vent relatif vu par un coureur (le sillage dérive du côté où va l'air). */
 export const tanVent = (r: Rider) => clamp(r.cw / Math.max(2, r.v + r.hw), -1.2, 1.2);
 
-/** Aspiration : paramètres du modèle (une seule source de vérité, utilisée aussi par l'affichage).
- *  Réduction de traînée d'un coureur placé derrière un autre : base · e^(−écart/longueur) · (1 − décalage/largeur).
- *  À 0,5 m ≈ 38 %, à 1 m ≈ 32 %, à 3 m ≈ 16 %, à 6 m ≈ 6 %. Plafond 48 % (deux coureurs devant). */
-export const ASPIRATION = { base: 0.45, longueur: 3.0, largeur: 0.9, plafond: 0.48 };
-/** Réduction de traînée apportée par UN coureur devant : `ecart` = distance entre sa roue arrière et ma roue avant (m), `dy` = décalage latéral par rapport à son sillage (m). */
+/** Aspiration : paramètres du modèle (une seule source de vérité, utilisée aussi par l'affichage). docs/v0.0.2-aspiration.md.
+ *  Réduction de traînée apportée par UN coureur devant, en cloche latérale qui s'élargit en aval :
+ *    A · e^(−x/L) · e^(−y² / 2σ(x)²),  σ(x) = σ0 + k·x
+ *  (x = écart entre roues, y = décalage latéral par rapport à son sillage).
+ *  Centre : 0,5 m ≈ 38 %, 1 m ≈ 32 %, 3 m ≈ 16 %, 6 m ≈ 6 %. Sommet plat : 0,2 m de décalage coûte peu ; à 0,5 m il reste ≈ 40 % du gain ; au-delà de 0,9 m, presque plus rien.
+ *  Cumul multiplicatif de 3 coureurs au plus, plafond 48 %. */
+export const ASPIRATION = { base: 0.45, longueur: 3.0, sigma0: 0.35, sigmaPente: 0.03, plafond: 0.48, portee: 14, nbMax: 3 };
+const sigmaAspiration = (ecart: number) => ASPIRATION.sigma0 + ASPIRATION.sigmaPente * Math.max(ecart, 0);
 export function aspirationValeur(ecart: number, dy: number): number {
-  if (dy >= ASPIRATION.largeur || ecart > 14) return 0;
-  return ASPIRATION.base * Math.exp(-Math.max(ecart, 0) / ASPIRATION.longueur) * (1 - dy / ASPIRATION.largeur);
+  if (ecart > ASPIRATION.portee) return 0;
+  const s = sigmaAspiration(ecart);
+  const d = ASPIRATION.base * Math.exp(-Math.max(ecart, 0) / ASPIRATION.longueur) * Math.exp(-(dy * dy) / (2 * s * s));
+  return d < 0.003 ? 0 : d;
 }
 
 /** Réduction de traînée due aux coureurs devant. Le sillage d'un coureur dérive latéralement avec le vent de côté :
  *  à `gap` mètres derrière lui il est centré à o.y + gap·tanβ. De face : tout droit derrière ; de côté : en éventail. */
 export function aspiration(self: Rider, others: Rider[]): number {
-  let d1 = 0, d2 = 0;
   const tb = tanVent(self);
+  const ds: number[] = [];
   for (const o of others) {
     if (o === self || o.status !== 'course') continue;
     const gap = o.x - self.x - RIDER_LEN;
-    if (o.x <= self.x || gap > 14) continue;
+    if (o.x <= self.x || gap > ASPIRATION.portee) continue;
     const dy = Math.abs(self.y - (o.y + Math.max(gap, 0) * tb));
     const d = aspirationValeur(gap, dy);
-    if (d <= 0) continue;
-    if (d > d1) { d2 = d1; d1 = d; } else if (d > d2) d2 = d;
+    if (d > 0) ds.push(d);
   }
-  return Math.min(ASPIRATION.plafond, d1 + 0.25 * d2);
+  // cumul multiplicatif des sillages les plus forts : 1 − Π(1 − dᵢ)
+  ds.sort((a, b) => b - a);
+  let reste = 1;
+  for (let i = 0; i < Math.min(ASPIRATION.nbMax, ds.length); i++) reste *= 1 - ds[i]!;
+  return Math.min(ASPIRATION.plafond, 1 - reste);
 }
 
 /** Mise à jour des réserves (Skiba simplifié pour l'explosivité, usure cubique pour l'endurance). */
 export function consommer(r: Rider, p: number, dt: number): void {
-  const cp = r.profile.cp;
-  const ratio = Math.min(p / cp, 1.3);
+  const ftp = r.profile.ftp;
+  const ratio = Math.min(p / ftp, 1.3);
   r.E = clamp(r.E - (ratio * ratio * ratio * dt) / r.profile.tEnd, 0, 1);
-  if (p > cp) {
-    r.X = clamp(r.X - ((p - cp) * dt) / r.profile.wPrime, 0, 1);
+  if (p > ftp) {
+    r.X = clamp(r.X - ((p - ftp) * dt) / r.profile.wPrime, 0, 1);
   } else {
     const tauRec = 240;
-    r.X = clamp(r.X + (1 - r.X) * ((cp - p) / cp) * (dt / tauRec), 0, 1);
+    r.X = clamp(r.X + (1 - r.X) * ((ftp - p) / ftp) * (dt / tauRec), 0, 1);
   }
 }

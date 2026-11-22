@@ -1,6 +1,15 @@
 # Journal des versions
 
 ## v0.0.3 (en cours)
+### v0.0.3a — physique et contrat Vouloir → Agir
+- **Aspiration en cloche** (σ croissant en aval) et **cumul multiplicatif** (3 sillages au plus, plafond 48 %) ; σ0 calé à 0,35 m (écart moyen entre roues 1,41 → 1,51 m sur 40 courses).
+- **FTP partout** : `Profile.cp` devient `Profile.ftp` (le seuil au-dessus duquel l'explosivité se vide) ; zones Z1-Z7 en données (`paliers.ts`), frontière Z4/Z5 à 100 % du FTP.
+- **Contrat `Intent`** : Vouloir choisit l'effort visé (part du FTP, ou « ce qu'il faut pour tenir la roue ») et les limites `effortMax` / `fatigueMax` (fatigue = 1 − E, plus basse quand il reste de la route) ; Agir convertit en watts (`wattsPour`) et **déclare** `limite-atteinte`, `fin-burst`, `rejoint`, `passage-termine`, `roue-perdue`. Agir garde son propre état (`Rider.geste`) et ne modifie plus l'intention.
+- **Générosité et réciprocité retirées** (profil, raisons `reciprocite` / `egoisme` / `genereux`, plancher d'allure de croisière) ; en tête, l'allure plancher est l'effort visé (83 % du FTP).
+- **Groupe** : vue dérivée (`Vue.groupes`), perçue (« groupe de N »). `pointe` normalisée par `POINTE_REF`.
+- Interface : le panneau « pourquoi ? » affiche l'effort ressenti (palier), le groupe, l'effort visé et les limites.
+- Batch (300 courses, avant → après) : durée 32 → 32 min ; changements de tête 54 → 61 ; part du temps en tête rouleur / sprinteur / attaquant / opportuniste 46 / 9 / 27 / 18 → 29 / 16 / 29 / 26 % ; victoires 23 / 21 / 46 / 10 → 14 / 17 / 48 / 22 % ; orage d'attaques 46 → 56 % ; décrochages 7,3 → 9,1 par course ; aucune course bloquée. Les écarts d'équilibre viennent surtout du retrait de la générosité ; ils seront traités avec les attaques en v0.0.3b.
+- Tests : 13 → 24.
 - **Docs reprises et rendues cohérentes** : intentions finales (s'abriter, se placer, participer, attaquer, suivre, revenir, gérer), **FTP** comme seul nom du seuil (plus de `cp` ; frontière Z4/Z5 à 100 % du FTP), **groupe** remis comme vue dérivée, **générosité et réciprocité retirées**, autres coureurs **déduits du comportement seul**, départ en paquet, fourchettes de parcours selon la distance. Plan de développement jusqu'à la v0.1.0 : `docs/v0.1.0-plan.md`.
 - **Attributs** : conception documentée (`docs/v0.0.3-attributs.md`) : niveaux ancrés WorldTour, FTP en W/kg au centre, pas de score affiché, durabilité en % du FTP après 3000 kJ.
 - **Calibration** (`calibration.ts`) : ancrages et niveaux en données ; coureurs du POC recalés WorldTour (FTP 5,4-6,0 W/kg, pointe jusqu'à 1800 W).

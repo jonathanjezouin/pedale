@@ -8,7 +8,7 @@ import type { Road } from './road';
 export type Archetype = 'rouleur' | 'sprinteur' | 'attaquant' | 'opportuniste';
 
 export const ARCHETYPE_LABEL: Record<Archetype, string> = {
-  rouleur: 'rouleur généreux',
+  rouleur: 'rouleur',
   sprinteur: 'sprinteur',
   attaquant: 'attaquant',
   opportuniste: 'opportuniste',
@@ -30,14 +30,13 @@ export const INTENTION_LABEL: Record<Intention, string> = {
 /** Profil individuel : l'individualité vient des paramètres, pas de logiques différentes (§4.2). */
 export interface Profile {
   // physiologie
-  cp: number;        // puissance critique (W) : ce qu'on peut tenir longtemps
-  wPrime: number;    // capacité d'explosion (J) au-dessus de cp
+  ftp: number;       // FTP (W) : ce qu'on peut tenir environ une heure. En dessous l'explosivité ne se consomme pas, au-dessus elle se vide
+  wPrime: number;    // capacité d'explosion (J) au-dessus du FTP
   pPeak: number;     // puissance de pointe (W)
-  tEnd: number;      // endurance : secondes « équivalent cp » avant épuisement de la réserve
+  tEnd: number;      // endurance : secondes à 100 % du FTP avant épuisement de la réserve
   mass: number;      // coureur + vélo (kg)
   cda: number;       // surface frontale × traînée (m²)
   // tempérament
-  generosite: number;   // 0..1
   agressivite: number;  // 0..1
   experience: number;   // 0..1 (réduit les défauts ; sert surtout au bruit, plus tard)
   // dérivé
@@ -46,19 +45,39 @@ export interface Profile {
   objectif: 'gagner';
 }
 
-/** Ce que veut le coureur et comment il le fait (état d'engagement). */
+/** Ce que veut le coureur (contrat Vouloir → Agir, docs/v0.0.3-comportement.md §4.1).
+ *  Contrat : { nature = kind, cible, effort, limites { effortMax, fatigueMax } }. Seul « Vouloir » écrit ici. */
 export interface IntentState {
-  kind: Intention | null;
-  since: number;          // instant du début de l'intention
-  commitUntil: number;    // pas de réévaluation « douce » avant cet instant
-  nextEval: number;       // réévaluation périodique
-  phase: string;          // phase interne de l'« Agir » (passe, tete, decale, burst…)
+  kind: Intention | null;      // nature
+  since: number;               // instant du début de l'intention
+  commitUntil: number;         // pas de réévaluation « douce » avant cet instant
+  nextEval: number;            // réévaluation périodique
+  sprint: boolean;             // Attaquer en mode sprint final
+  cible: number | null;        // coureur visé (Suivre l'attaque)
+  /** Effort visé, en part du FTP (0,83 = 83 %). `null` : l'effort n'est pas choisi, il est la conséquence de la roue à tenir. */
+  effort: number | null;
+  /** Limites acceptées pour cette action, recalculées à chaque évaluation. */
+  effortMax: number;           // part du FTP au plus (au-dessus de 1 on puise dans l'explosivité)
+  fatigueMax: number;          // fatigue (1 − E) au-delà de laquelle je n'accepte plus de tenir ça
+  termine: boolean;            // Vouloir a reçu « rejoint » : se rabattre est fini
+  forceEval: string | null;    // déclencheur de réévaluation (événements du monde : décroché, attaque, sprint…)
+}
+
+/** Événements déclarés par « Agir » vers « Vouloir » (§4.2). Agir ne modifie jamais l'intention. */
+export type EvenementAgir = 'rejoint' | 'fin-burst' | 'roue-perdue' | 'limite-atteinte' | 'passage-termine';
+export interface EvenementDeclare { type: EvenementAgir; t: number; detail?: string }
+
+/** État d'exécution propre à « Agir » (le « geste ») : invisible de « Vouloir ». */
+export interface Geste {
+  nature: Intention | null;    // intention pour laquelle ce geste a été initialisé
+  phase: string;               // passe, tete, decale, rejoint, burst, sustain, couloir…
   phaseSince: number;
-  sprint: boolean;        // Attaquer en mode sprint final
-  cible: number | null;   // coureur visé (Suivre l'attaque)
-  vHold: number;          // vitesse tenue en relais
-  side: -1 | 1;           // couloir latéral utilisé pour passer/attaquer
-  forceEval: string | null;
+  vHold: number;               // vitesse tenue en tête
+  side: -1 | 1;                // couloir latéral utilisé pour passer/attaquer
+  limiteT: number;             // dernier « limite-atteinte » déclaré (anti-répétition)
+  surLimiteDepuis: number;     // instant depuis lequel ce que demande la roue dépasse mon effort max (−1 : non)
+  roueT: number;               // dernier « roue-perdue » déclaré
+  enSuivi: boolean;            // roue à moins de 6 m au pas précédent
 }
 
 export interface RiderStats {
@@ -84,6 +103,8 @@ export interface Rider {
   X: number;  // explosivité disponible 0..1
   // état de course
   intent: IntentState;
+  geste: Geste;
+  evenements: EvenementDeclare[];   // déclarés par Agir depuis la dernière décision
   stats: RiderStats;
   decroche: boolean;       // à plus de ~40 m du coureur juste devant (avec hystérésis)
   ecartDevant: number;     // m jusqu'au coureur juste devant (1e9 si je suis premier)
@@ -117,6 +138,10 @@ export interface Percu {
     ecartDevant: number;       // m jusqu'au coureur juste devant (1e9 si premier)
     tempsEnTete: number;       // s en tête, en continu
     leadRecent: number; partRelais: number;
+    effortRessenti: number;    // puissance actuelle en part du FTP (palier ressenti)
+    groupeTaille: number;      // coureurs dans mon groupe (moi compris)
+    rangDansGroupe: number;    // 0 = premier de mon groupe
+    evenements: EvenementAgir[];   // ce qu'Agir m'a déclaré depuis ma dernière décision
   };
   rivaux: {
     allure: number;            // vitesse médiane des coureurs encore en course (m/s)
@@ -130,7 +155,7 @@ export interface Percu {
   };
   course: { distRestante: number; distParcourue: number; ventFace: number; ventCote: number };
   role: { objectif: 'gagner' };
-  profil: { endurance: number; pointe: number; generosite: number; agressivite: number; experience: number };
+  profil: { endurance: number; pointe: number; agressivite: number; experience: number };
 }
 
 /** Valeurs exactes correspondantes : la trace montre ce que le coureur croyait *et* la réalité (§4.1). */
@@ -142,11 +167,10 @@ export interface Interprete {
   distance: 'sprint' | 'proche' | 'moyenne' | 'loin';
   position: 'premier' | 'dans-la-course' | 'decroche';
   placement: 'expose' | 'abrite';
-  partRelais: 'moins' | 'egal' | 'plus';
+  partRelais: 'egal' | 'plus';
   // quantités continues utilisées par « Vouloir »
   reserveBasse: number;       // 0..1
   explosiviteBasse: number;   // 0..1
-  deficitRelais: number;      // 0..1 : j'ai moins roulé que les autres
   excesRelais: number;        // 0..1 : j'ai plus roulé que les autres
   rasLeBol: number;           // 0..1 : je suis presque seul à rouler
   sprintFocus: number;        // 0..1 : mon atout est le sprint
@@ -227,6 +251,7 @@ export interface Vue {
   xMoyen: number;
   xFront: number;            // abscisse du coureur le plus avancé
   tanB: number;              // tangente de l'angle du vent relatif : décalage latéral du sillage par mètre
+  groupes: Rider[][];        // vue dérivée : suites de coureurs consécutifs sans « décroché » ; chaque groupe de la tête vers l'arrière
   yTete: number;             // décalage latéral de la tête de file (côté du vent si vent de côté)
   coteMontant: -1 | 1;       // côté où l'on remonte la file (côté du vent)
 }

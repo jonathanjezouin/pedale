@@ -11,6 +11,10 @@ import type { Profile } from './types';
 /** Masse du vélo (kg) : `Profile.mass` = coureur + vélo ; les W/kg se comptent sur le coureur seul. */
 export const VELO_KG = 7;
 
+/** Plage de puissance de pointe (W) sur laquelle `pointe` (0..1) est normalisée : celle des coureurs du POC. */
+export const POINTE_REF = { min: 1100, max: 1750 } as const;
+export const pointeNorm = (pPeak: number) => Math.max(0, Math.min(1, (pPeak - POINTE_REF.min) / (POINTE_REF.max - POINTE_REF.min)));
+
 /** Les 5 niveaux, du plus bas au plus haut. Quatre seuils les séparent (résolution fine en haut). */
 export const NIVEAUX = ['sous le WorldTour', 'équipier', 'leader', 'top 10 mondial', 'phénomène'] as const;
 export type Niveau = 0 | 1 | 2 | 3 | 4;
@@ -42,8 +46,8 @@ export function niveauDe(attr: Attribut, valeur: number): Niveau {
 
 /* --------------------- conversions vers les valeurs lisibles --------------------- */
 
-/** FTP affiché : on l'identifie à la puissance critique (CP et FTP sont proches), rapportée au coureur seul. */
-export const ftpWkg = (p: Pick<Profile, 'cp' | 'mass'>) => p.cp / (p.mass - VELO_KG);
+/** FTP en W/kg, rapporté au coureur seul (le modèle n'a qu'un seuil : le FTP). */
+export const ftpWkg = (p: Pick<Profile, 'ftp' | 'mass'>) => p.ftp / (p.mass - VELO_KG);
 
 /** Durabilité lisible : % du FTP conservé après 3000 kJ de travail, interpolé depuis `tEnd` (unité interne en secondes). */
 const DURABILITE_PTS: [number, number][] = [[2000, 90], [2600, 94], [3200, 96.5], [3800, 98.5], [5000, 99.5]];

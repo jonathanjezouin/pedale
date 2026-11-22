@@ -1,5 +1,5 @@
 /* Interface HTML : fil de course, liste des coureurs, explication « pourquoi ? », fin de course. */
-import { ARCHETYPE_LABEL, INTENTION_LABEL, NIVEAUX, expliquer, ftpWkg, niveauDe, resumeEvaluations } from '@pedale/sim';
+import { ARCHETYPE_LABEL, INTENTION_LABEL, NIVEAUX, expliquer, ftpWkg, libellePalier, niveauDe, palierDe, resumeEvaluations } from '@pedale/sim';
 import type { Intention, Rider, SimEvent, World } from '@pedale/sim';
 import { PALETTES } from './riders';
 
@@ -83,7 +83,8 @@ export function updateTrace(w: World, id: number) {
   const p = d.percu, it = d.interprete;
   const pills = [
     `réserve ${Math.round(p.moi.reserve * 100)} %`, `explosivité ${Math.round(p.moi.explosivite * 100)} %`,
-    `allure ${(p.rivaux.allure * 3.6).toFixed(0)} km/h`,
+    `allure ${(p.rivaux.allure * 3.6).toFixed(0)} km/h`, `effort ressenti ${palierDe(p.moi.effortRessenti).code} (${Math.round(p.moi.effortRessenti * 100)} % du FTP)`,
+    ...(p.moi.groupeTaille > 1 ? [`groupe de ${p.moi.groupeTaille}`] : []),
     p.moi.decroche ? `décroché (${Math.round(p.moi.ecartDevant)} m)` : p.moi.rang === 0 ? 'premier' : `${p.moi.rang + 1}e${p.moi.abrite > 0.12 ? ', abrité' : ', exposé'}`,
     `vent ${p.course.ventFace >= 0 ? 'de face' : 'dans le dos'} ${Math.abs(p.course.ventFace).toFixed(1)} m/s` + (Math.abs(p.course.ventCote) > 0.5 ? `, de côté ${Math.abs(p.course.ventCote).toFixed(1)} m/s (${p.course.ventCote > 0 ? 'de gauche' : 'de droite'})` : ''),
     ...(p.rivaux.devantLetter ? [`${p.rivaux.devantLetter} devant moi`] : []),
@@ -102,13 +103,21 @@ export function updateTrace(w: World, id: number) {
       <div class="muted">Réel : réserve ${Math.round(d.reel.reserve * 100)} % — perception exacte en v0.0.1 (pas de bruit).</div></div>
     <div class="sec"><b>Interprété</b>${cap(it.phrases.join(', '))}.</div>
     <div class="sec"><b>Intention</b><span class="chip" style="--c:${INTENT_COLOR[d.intention]}">${INTENTION_LABEL[d.intention]}${sprint}</span>
-      <span class="muted"> engagée jusqu'à ${d.engagementJusqua === Infinity ? 'la ligne' : fmtT(d.engagementJusqua)}</span>${why}</div>
+      <span class="muted"> engagée jusqu'à ${d.engagementJusqua === Infinity ? 'la ligne' : fmtT(d.engagementJusqua)}</span>
+      <div class="muted">${limitesTexte(r)}</div>${why}</div>
     <div class="sec"><b>Action</b><div class="quote">« ${cap(d.action)}. »</div></div>
     <div class="sec"><button id="bAlt">${showAlt ? 'Masquer' : 'Voir'} les autres intentions</button>
       <button id="bCopy">Copier la trace</button></div>
     ${showAlt ? `<div class="sec">${alt}</div>` : ''}`;
   document.getElementById('bAlt')!.onclick = () => { toggleAlt(); updateTrace(w, id); };
   document.getElementById('bCopy')!.onclick = () => { void navigator.clipboard?.writeText(expliquer(d)); };
+}
+
+/** Contrat Vouloir → Agir en mots : effort visé, effort max, fatigue max (docs/v0.0.3-comportement.md §4.1). */
+function limitesTexte(r: Rider): string {
+  const i = r.intent;
+  const visé = i.effort === null ? 'effort : celui qu\'il faut pour tenir la roue' : `effort visé : ${libellePalier(i.effort)}`;
+  return `${visé} · accepte jusqu'à ${palierDe(i.effortMax).code} (${Math.round(i.effortMax * 100)} %) · fatigue max ${Math.round(i.fatigueMax * 100)} %`;
 }
 
 /* ---------------- fil de course ---------------- */

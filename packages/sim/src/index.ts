@@ -1,5 +1,6 @@
 export * from './types';
 export * from './physics';
+export * from './paliers';
 export * from './road';
 export { axeY, enLigne, decalage, LIMITE } from './placement';
 export { creerMonde, configParDefaut } from './scenario';
@@ -7,5 +8,5 @@ export { pas, simuler } from './world';
 export { percevoir, interpreter, evaluer, TUNE, distanceSprint, engagement } from './mind';
 export { expliquer, resumeEvaluations } from './trace';
 export { mulberry32 } from './rng';
-export { ANCRAGES, NIVEAUX, VELO_KG, ftpWkg, durabilitePct, niveauDe, lecture } from './calibration';
+export { ANCRAGES, NIVEAUX, VELO_KG, POINTE_REF, pointeNorm, ftpWkg, durabilitePct, niveauDe, lecture } from './calibration';
 export type { Attribut, Niveau } from './calibration';

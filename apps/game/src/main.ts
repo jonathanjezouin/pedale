@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
-import { aspirationValeur, creerMonde, pas, RIDER_LEN, tanVent } from '@pedale/sim';
+import { ASPIRATION, aspirationValeur, creerMonde, pas, RIDER_LEN, tanVent } from '@pedale/sim';
 import type { World } from '@pedale/sim';
 import { BIOMES, BIOME_KEYS, PX_PER_M, Scenery, TILE } from './scenery';
 import type { BiomeKey } from './scenery';
@@ -188,7 +188,7 @@ app.ticker.add(() => {
       const v = views[i]! as unknown as { s: number; d: number }, tb = tanVent(r);
       let prevP: { x: number; y: number } | null = null;
       gaps.forEach((g, k) => {
-        const p = pos(v.s - RIDER_LEN - g + 0.0, v.d + g * tb), a = aspirationValeur(g, 0) / 0.45;
+        const p = pos(v.s - RIDER_LEN - g + 0.0, v.d + g * tb), a = aspirationValeur(g, 0) / ASPIRATION.base;
         if (prevP && k > 0) aspiGfx.moveTo(prevP.x, prevP.y).lineTo(p.x, p.y).stroke({ width: 30 + 20 * a, color: 0x14c8b4, alpha: aspiOpacity * (0.15 + 0.85 * a) * 0.55, cap: 'round' });
         prevP = p;
       });

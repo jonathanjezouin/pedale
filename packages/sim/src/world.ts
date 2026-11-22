@@ -5,10 +5,12 @@ import {
   aspiration, capExplosif, consommer, E_CUIT, MAX_LAT_SPEED, LAT_ACCEL, LAT_TAU, FREINAGE_MAX, resistance, RIDER_LEN, capSoutenu,
 } from './physics';
 import { axeY, enLigne, LIMITE } from './placement';
-import { distanceSprint, engagement, evaluer, interpreter, percevoir, TUNE } from './mind';
+import { distanceSprint, engagement, evaluer, interpreter, limitesDe, percevoir, TUNE } from './mind';
 import { clamp } from './util';
 
-const URGENT = new Set(['depart', 'cuit', 'sprint', 'decroche', 'recolle', 'attaque']);
+const URGENT = new Set(['depart', 'cuit', 'sprint', 'decroche', 'recolle', 'attaque', 'limite-atteinte']);
+/** Événements déclarés par Agir qui demandent une réévaluation (les autres sont seulement transmis à la prochaine décision). */
+const EVT_FORCANTS = new Set(['rejoint', 'fin-burst', 'limite-atteinte']);
 
 function evt(w: World, type: SimEvent['type'], riderId: number | null, texte: string, grave = false) {
   w.events.push({ t: w.t, type, riderId, texte, grave });
@@ -34,7 +36,7 @@ function instantane(w: World) {
   const k = Math.max(0, Math.min(1, (Math.abs(tanB) - 0.05) / 0.25));
   const xFront = actifs.length ? actifs[0]!.x : 0;
   const xMoyen = actifs.length ? actifs.reduce((s, r) => s + r.x, 0) / actifs.length : 0;
-  w.vue = { ordre: actifs, vitesse, meneur: null, xMoyen, xFront, tanB, yTete: coteMontant * k * (LIMITE - 0.5), coteMontant };
+  w.vue = { ordre: actifs, vitesse, meneur: null, xMoyen, xFront, tanB, groupes: [], yTete: coteMontant * k * (LIMITE - 0.5), coteMontant };
   let meneur: Rider | null = null;
   for (const r of actifs) if (enLigne(w, r) && (!meneur || r.x > meneur.x)) meneur = r;
   w.vue.meneur = meneur;
@@ -47,6 +49,10 @@ function instantane(w: World) {
     if (!was && r.decroche) { evt(w, 'decroche', r.id, `${r.letter} est décroché (${Math.round(gap)} m)`, true); r.intent.forceEval = 'decroche'; }
     else if (was && !r.decroche) { evt(w, 'recolle', r.id, `${r.letter} recolle`); r.intent.forceEval = 'recolle'; }
   });
+  // groupes : vue dérivée (suites de coureurs consécutifs sans « décroché »), de la tête vers l'arrière
+  const groupes: Rider[][] = [];
+  actifs.forEach((r, i) => { if (i === 0 || r.decroche) groupes.push([r]); else groupes[groupes.length - 1]!.push(r); });
+  w.vue.groupes = groupes;
 }
 
 function suiviDeTete(w: World) {
@@ -91,12 +97,10 @@ function decider(w: World, r: Rider, declencheur: string) {
   // à moins de 600 m, toute attaque est de fait un sprint (pas d'« écart » à tenter sur un sprint)
   const sprintRaison = ev.raisons.some((q) => q.id === 'sprint' && q.valeur > 0) || (choisie === 'attaquer' && percu.course.distRestante <= 600);
 
+  const evts = percu.moi.evenements;
   if (change) {
-    it.kind = choisie; it.since = w.t; it.phase = ''; it.phaseSince = w.t; it.sprint = false; it.cible = null;
-    if (choisie === 'relais') it.phase = 'passe';
-    if (choisie === 'rabattre') it.phase = 'decale';
+    it.kind = choisie; it.since = w.t; it.sprint = false; it.cible = null; it.termine = false;
     if (choisie === 'attaquer') {
-      it.phase = 'burst';
       it.sprint = sprintRaison;
       r.stats.attaques++; r.stats.lastAttackT = w.t;
       // un lanceur de sprint est aussi une « attaque » à suivre : les autres sautent dans sa roue (à l'abri) jusqu'à leur propre lancement
@@ -109,9 +113,15 @@ function decider(w: World, r: Rider, declencheur: string) {
       for (const o of w.riders) if (o !== r && o.status === 'course' && !(o.intent.kind === 'attaquer' && o.intent.sprint)) o.intent.forceEval = 'attaque';
     }
     if (choisie === 'suivre') it.cible = percu.rivaux.attaque ? percu.rivaux.attaque.id : null;
-  } else if (choisie === 'attaquer' && sprintRaison) {
-    it.sprint = true;
+  } else {
+    if (choisie === 'attaquer' && sprintRaison) it.sprint = true;
+    if (evts.includes('rejoint')) it.termine = true;        // Agir a déclaré : je suis revenu dans la file
   }
+  // contrat Vouloir → Agir : effort visé et limites, recalculés à chaque évaluation
+  const burstFini = !change && choisie === 'attaquer' && !it.sprint && (evts.includes('fin-burst') || (it.effort !== null && it.effort < 3));
+  const lim = limitesDe(choisie, r, percu.course.distRestante, it.sprint, burstFini);
+  it.effort = lim.effort; it.effortMax = lim.effortMax; it.fatigueMax = lim.fatigueMax;
+  r.evenements = [];
   it.commitUntil = it.sprint ? Infinity : w.t + engagement(r, choisie);
   it.nextEval = w.t + TUNE.intervalleBase * (1 - 0.4 * r.profile.experience);
   it.forceEval = null;
@@ -129,6 +139,8 @@ function decider(w: World, r: Rider, declencheur: string) {
 function decisions(w: World) {
   for (const r of w.vue.ordre) {
     const it = r.intent;
+    const forcant = r.evenements.find((e) => EVT_FORCANTS.has(e.type));
+    if (forcant && !it.forceEval) it.forceEval = forcant.type;
     // événements propres au coureur
     if (!r.cuit && r.E < E_CUIT) { r.cuit = true; evt(w, 'cuit', r.id, `${r.letter} est à bout de réserves`); it.forceEval = 'cuit'; }
     const d = w.finishX - r.x - 0.9;
@@ -160,7 +172,7 @@ function physique(w: World) {
     r.x += (r.v * dt) / Math.max(0.5, 1 - w.road.courbure(r.x) * r.y);
     // posture visible (cocottes / bas du cintre / danseuse / écrasé), avec un temps minimal entre deux changements
     let post: 0 | 1 | 2 | 3 = 0;
-    if (r.intent.kind === 'attaquer' && (r.intent.sprint || r.intent.phase === 'burst')) post = 2;
+    if (r.intent.kind === 'attaquer' && (r.intent.sprint || r.geste.phase === 'burst')) post = 2;
     else if (r.E < 0.2) post = 3;
     else if (p > 0.9 * capSoutenu(r) && r.draft < 0.15) post = 1;
     if (post !== r.posture && w.t - r.postureT > 1.5) { r.posture = post; r.postureT = w.t; }

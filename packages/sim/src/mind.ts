@@ -22,7 +22,7 @@ export const TUNE = {
  *  un peu plus tôt s'il est agressif, un peu plus tard s'il a une grosse pointe. */
 export function distanceSprint(r: Rider): number {
   const p = r.profile;
-  const dureeTenable = (r.X * p.wPrime) / (0.75 * Math.max(100, p.pPeak - p.cp));   // s
+  const dureeTenable = (r.X * p.wPrime) / (0.75 * Math.max(100, p.pPeak - p.ftp));   // s
   const f = 1.05 - 0.15 * p.pointe + 0.15 * p.agressivite;
   return Math.round(clamp(f * dureeTenable * 12.5, 110, 480));
 }
@@ -30,13 +30,38 @@ export function distanceSprint(r: Rider): number {
 /** Durée d'engagement minimale de chaque intention (§6.2). */
 export function engagement(r: Rider, k: Intention): number {
   switch (k) {
-    case 'relais': return 30 + 30 * r.profile.generosite;
+    case 'relais': return 45;
     case 'abriter': return 6;
     case 'rabattre': return 14;
     case 'attaquer': return 10;
     case 'suivre': return 10;
     case 'gerer': return 15;
     case 'revenir': return 10;
+  }
+}
+
+/* ---------------------------- Limites (Vouloir → Agir) ---------------------------- */
+
+/** Fatigue (1 − E) que j'accepte pour une action : plus il reste de route, plus elle est basse ; près de l'arrivée, elle tend vers « tout donner ».
+ *  Première version simple (docs/v0.0.3-comportement.md §4.1), à ajuster à l'œil. */
+export function fatigueAcceptee(distRestante: number): number {
+  return 0.55 + 0.40 * (1 - smoothstep(2000, 12000, distRestante));
+}
+
+/** Effort visé et limites de l'intention choisie. Valeurs de départ = celles du POC (qui étaient des coefficients dans « Agir »).
+ *  `effort` null : l'effort est la conséquence de la roue à tenir, pas un choix. */
+export function limitesDe(k: Intention, r: Rider, d: number, sprint: boolean, burstFini: boolean): { effort: number | null; effortMax: number; fatigueMax: number } {
+  const fat = fatigueAcceptee(d);
+  switch (k) {
+    case 'abriter': return { effort: null, effortMax: 1.2, fatigueMax: fat };      // jusqu'à Z5 (+20 %) pour reprendre l'abri
+    case 'relais': return { effort: 0.83, effortMax: 1.05, fatigueMax: fat };       // mener ≈ 83 % du FTP au moins ; jusqu'à 105 % pour passer
+    case 'rabattre': return { effort: null, effortMax: 1.0, fatigueMax: fat };
+    case 'attaquer':
+      if (sprint) return { effort: 3.0, effortMax: 3.0, fatigueMax: 1.0 };          // tout ce que la physique permet
+      return burstFini ? { effort: 1.07, effortMax: 1.07, fatigueMax: Math.max(fat, 0.8) } : { effort: 3.0, effortMax: 3.0, fatigueMax: Math.max(fat, 0.8) };
+    case 'suivre': return { effort: null, effortMax: 3.0, fatigueMax: Math.max(fat, 0.8) };
+    case 'gerer': return { effort: 0.78, effortMax: 0.78, fatigueMax: 1.0 };
+    case 'revenir': return { effort: null, effortMax: 1.12, fatigueMax: Math.max(fat, 0.85) };
   }
 }
 
@@ -55,6 +80,7 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
   for (const o of actifs) if (!meilleur || o.profile.pointe > meilleur.profile.pointe) meilleur = o;
   const meilleurePointe = Math.max(r.profile.pointe, meilleur?.profile.pointe ?? 0);
   const meneur = w.meneurId !== null ? w.riders[w.meneurId]! : null;
+  const groupe = g.groupes.find((gr) => gr.includes(r)) ?? [r];
   let attaque: Percu['rivaux']['attaque'] = null;
   if (w.attaque && w.attaque.id !== r.id) {
     const a = w.riders[w.attaque.id]!;
@@ -70,12 +96,14 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
     moi: {
       reserve: r.E, explosivite: r.X, vitesse: r.v, abrite: r.draft, rang, estEnTete, decroche: r.decroche, ecartDevant: r.ecartDevant,
       tempsEnTete, leadRecent: r.stats.leadRecent, partRelais: sumLead > 0 ? r.stats.leadRecent / sumLead : 0,
+      effortRessenti: r.p / r.profile.ftp, groupeTaille: groupe.length, rangDansGroupe: groupe.indexOf(r),
+      evenements: r.evenements.map((e) => e.type),
     },
     rivaux: {
       allure: g.vitesse,
       devantId: devant ? devant.id : null, devantLetter: devant ? devant.letter : null,
       meneurId: meneur ? meneur.id : null, meneurLetter: meneur ? meneur.letter : null, meneurDepuis: meneur ? w.t - w.meneurDepuis : 0,
-      quelquunPasse: g.ordre.some((o) => o !== r && o.intent.kind === 'relais' && o.intent.phase === 'passe'),
+      quelquunPasse: g.ordre.some((o) => o !== r && o.intent.kind === 'relais' && o.geste.phase === 'passe'),
       moyenneRelaisAutres: moyAutres,
       meilleurePointe, sprinteurDangereux: !!meilleur && meilleur.profile.pointe > r.profile.pointe + 0.08,
       sprinteurLetter: meilleur && meilleur.profile.pointe > r.profile.pointe + 0.08 ? meilleur.letter : null,
@@ -83,7 +111,7 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
     },
     course: { distRestante: Math.max(0, w.finishX - r.x - 0.9), distParcourue: r.x, ventFace: r.hw, ventCote: r.cw },
     role: { objectif: 'gagner' },
-    profil: { endurance: r.profile.tEnd, pointe: r.profile.pointe, generosite: r.profile.generosite, agressivite: r.profile.agressivite, experience: r.profile.experience },
+    profil: { endurance: r.profile.tEnd, pointe: r.profile.pointe, agressivite: r.profile.agressivite, experience: r.profile.experience },
   };
   // POC : perception exacte. (Plus tard : biais durable / retard / perception grossière ici.)
   const reel: Reel = { reserve: r.E, explosivite: r.X, ecartDevant: r.ecartDevant };
@@ -110,9 +138,8 @@ export function interpreter(p: Percu): Interprete {
   const distance: Interprete['distance'] = d < 600 ? 'sprint' : d < 2500 ? 'proche' : d < 8000 ? 'moyenne' : 'loin';
   const position: Interprete['position'] = p.moi.decroche ? 'decroche' : p.moi.rang === 0 ? 'premier' : 'dans-la-course';
   const mine = p.moi.leadRecent, moy = p.rivaux.moyenneRelaisAutres;
-  const deficitRelais = clamp((moy - mine) / Math.max(25, moy), 0, 1);
   const excesRelais = clamp((mine - moy) / Math.max(25, mine), 0, 1);
-  const partRelais: Interprete['partRelais'] = deficitRelais > 0.25 ? 'moins' : excesRelais > 0.25 ? 'plus' : 'egal';
+  const partRelais: Interprete['partRelais'] = excesRelais > 0.25 ? 'plus' : 'egal';
   const sumAll = mine + p.rivaux.autres.reduce((s, o) => s + o.leadRecent, 0);
   const rasLeBol = sumAll >= 90 ? clamp((mine / sumAll - 0.45) / 0.4, 0, 1) : 0;
   const sprintFocus = clamp((p.profil.pointe - 0.45) / 0.4, 0, 1);
@@ -120,13 +147,13 @@ export function interpreter(p: Percu): Interprete {
   phrases.push(forme === 'frais' ? 'je me sens frais' : forme === 'bien' ? 'je me sens bien' : forme === 'limite' ? 'je suis à la limite' : 'je suis cuit');
   if (explosivite === 'vide') phrases.push("je n'ai plus d'explosivité");
   if (partRelais === 'plus') phrases.push("j'ai plus roulé que les autres");
-  else if (partRelais === 'moins') phrases.push("j'ai moins roulé que les autres");
+  if (p.moi.groupeTaille > 1) phrases.push(`je suis dans un groupe de ${p.moi.groupeTaille}`);
   if (position === 'decroche') phrases.push(`je suis décroché (${Math.round(p.moi.ecartDevant)} m)`);
   else if (position === 'premier') phrases.push('je suis en tête de la course');
   return {
     forme, explosivite, distance, position, placement: p.moi.abrite > 0.12 ? 'abrite' : 'expose', partRelais,
     reserveBasse: clamp((0.45 - E) / 0.35, 0, 1), explosiviteBasse: clamp((0.6 - X) / 0.4, 0, 1),
-    deficitRelais, excesRelais, rasLeBol, sprintFocus, phrases,
+    excesRelais, rasLeBol, sprintFocus, phrases,
   };
 }
 
@@ -152,10 +179,8 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         if (p.rivaux.sprinteurDangereux)
           mk(raisons, 'user', `Pour gagner, je dois user ${p.rivaux.sprinteurLetter} : plus la course est dure, moins il aura de jambes à la fin`, 2.5 * clamp((p.rivaux.meilleurePointe - prof.pointe) / 0.3, 0, 1) * smoothstep(1500, 6000, d));
         if (p.moi.estEnTete) mk(raisons, 'devant', "Je suis devant : personne à qui prendre la roue", 1.5);
-        mk(raisons, 'reciprocite', "Je n'ai pas roulé autant que les autres", 3.5 * it.deficitRelais);
         mk(raisons, 'reserve', 'Ma réserve est basse', -4.5 * it.reserveBasse);
         mk(raisons, 'rasLeBol', 'Je suis presque le seul à rouler depuis longtemps', -4.5 * it.rasLeBol);
-        mk(raisons, 'egoisme', 'Mon tempérament est plutôt égoïste', -2.5 * (1 - prof.generosite));
         if (!p.moi.estEnTete && p.rivaux.meneurId !== null && p.rivaux.meneurDepuis < 20)
           mk(raisons, 'dejaPris', `${p.rivaux.meneurLetter} vient de prendre le relais`, -4 * clamp(1 - p.rivaux.meneurDepuis / 25, 0, 1));
         if (!p.moi.estEnTete && p.moi.rang > 1) mk(raisons, 'rang', 'Il y a du monde à dépasser avant de passer devant', -0.6 * Math.min(p.moi.rang - 1, 4));
@@ -171,13 +196,12 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
       }
       case 'rabattre': {
         if (p.moi.decroche) vetos.push('Je suis décroché : je ne mène personne');
-        if (!(p.moi.estEnTete || (r.intent.kind === 'rabattre' && r.intent.phase !== 'rejoint'))) vetos.push("Je suis déjà à l'abri dans la file");
+        if (!(p.moi.estEnTete || (r.intent.kind === 'rabattre' && !r.intent.termine))) vetos.push("Je suis déjà à l'abri dans la file");
         const dureeRelais = engagement(r, 'relais');
         mk(raisons, 'duree', "J'ai fait mon temps de relais", 4 * clamp(p.moi.tempsEnTete / dureeRelais, 0, 1.2));
         mk(raisons, 'rasLeBol', 'Je suis presque le seul à rouler depuis longtemps', 4.5 * it.rasLeBol);
         mk(raisons, 'reserve', 'Ma réserve est basse', 3 * it.reserveBasse);
         if (p.rivaux.quelquunPasse) mk(raisons, 'releve', 'Quelqu’un prend le relais : je peux me rabattre', 2.5);
-        mk(raisons, 'genereux', 'Je suis généreux : je préfère rester devant', -1.5 * prof.generosite);
         break;
       }
       case 'attaquer': {
@@ -242,6 +266,9 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         break;
       }
     }
+    // limite atteinte (déclarée par Agir) : l'action en cours coûte plus que ce que je m'étais fixé
+    if (r.intent.kind === k && p.moi.evenements.includes('limite-atteinte') && (k === 'relais' || k === 'suivre' || k === 'revenir' || (k === 'attaquer' && !r.intent.sprint)))
+      mk(raisons, 'limite', "J'ai atteint la limite d'effort ou de fatigue que je m'étais fixée pour cette action", -3);
     out.push({ intention: k, score: raisons.reduce((s, q) => s + q.valeur, 0), raisons, vetos });
   }
   return out;

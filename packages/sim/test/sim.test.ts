@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { creerMonde, pas, simuler, expliquer, aspiration, puissanceVers, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF, niveauDe, durabilitePct, ftpWkg, lecture } from '../src/index';
+import { creerMonde, pas, simuler, expliquer, aspiration, aspirationValeur, ASPIRATION, puissanceVers, wattsPour, capSoutenu, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF, niveauDe, durabilitePct, ftpWkg, lecture, palierDe, PALIERS, pointeNorm } from '../src/index';
 
 describe('simulation v0.0.1', () => {
   it('est déterministe : même seed, même course', () => {
@@ -96,7 +96,7 @@ describe('simulation v0.0.1', () => {
     const toutDroit = aspiration(b!, w.riders);
     b!.y = 0.6 * (3 / 10);                                              // décalé sous le vent d'environ gap·tanβ
     const decale = aspiration(b!, w.riders);
-    expect(decale).toBeGreaterThan(toutDroit + 0.05);
+    expect(decale).toBeGreaterThan(toutDroit + 0.03);
     for (const r of [a!, b!]) { r.cw = 0; r.hw = 3; }
     b!.y = 0;
     expect(aspiration(b!, w.riders)).toBeGreaterThan(0.3);              // de face : derrière la roue, comme avant
@@ -147,5 +147,132 @@ describe('calibration WorldTour (v0.0.3)', () => {
         expect(l.niveaux.ftp).toBeGreaterThanOrEqual(1);
       }
     }
+  });
+});
+
+describe('v0.0.3a : aspiration en cloche et cumul multiplicatif', () => {
+  it('la cloche a un sommet plat, décroît avec le décalage et avec l\'écart', () => {
+    const v = (e: number, dy: number) => aspirationValeur(e, dy);
+    expect(v(0.6, 0)).toBeGreaterThan(0.3);
+    expect(v(0.6, 0.15)).toBeGreaterThan(0.9 * v(0.6, 0));        // petit décalage : coût faible (sommet plat)
+    expect(v(0.6, 0.5)).toBeLessThan(0.6 * v(0.6, 0));            // demi-largeur d'épaule : on a perdu une bonne part
+    expect(v(0.6, 1.2)).toBe(0);                                  // hors sillage
+    expect(v(1, 0)).toBeGreaterThan(v(3, 0));
+    expect(v(ASPIRATION.portee + 1, 0)).toBe(0);
+    for (let dy = 0; dy < 1.2; dy += 0.1) expect(v(1, dy + 0.1)).toBeLessThanOrEqual(v(1, dy) + 1e-12);   // jamais croissante
+  });
+  it('le cumul de deux sillages est multiplicatif : plus que le meilleur, moins que la somme, plafonné', () => {
+    const w = creerMonde({ seed: 1 });
+    const [a, b, c] = w.riders;
+    for (const r of [a!, b!, c!]) { r.status = 'course'; r.y = 0; r.cw = 0; r.hw = 3; }
+    c!.x = 0; b!.x = 4; a!.x = 8;                                 // c suit b (écart 2,2 m) qui suit a
+    const seul = aspiration(c!, [b!]);
+    const deux = aspiration(c!, [a!, b!]);
+    const dB = aspirationValeur(4 - 1.8, 0), dA = aspirationValeur(8 - 1.8, 0);
+    expect(deux).toBeGreaterThan(seul);
+    expect(deux).toBeCloseTo(Math.min(ASPIRATION.plafond, 1 - (1 - dB) * (1 - dA)), 9);
+    expect(deux).toBeLessThan(dB + dA);
+    expect(deux).toBeLessThanOrEqual(ASPIRATION.plafond);
+  });
+});
+
+describe('v0.0.3a : FTP, paliers, contrat Vouloir → Agir', () => {
+  it('FTP est le seul nom du seuil ; plus de générosité dans le profil', () => {
+    const p = creerMonde({ seed: 1 }).riders[0]!.profile as unknown as Record<string, unknown>;
+    expect(typeof p.ftp).toBe('number');
+    expect(p.cp).toBeUndefined();
+    expect(p.generosite).toBeUndefined();
+  });
+  it('les 7 paliers couvrent tout l\'effort, la frontière Z4 / Z5 est à 100 % du FTP', () => {
+    expect(PALIERS).toHaveLength(7);
+    expect(palierDe(0.3).code).toBe('Z1');
+    expect(palierDe(0.6).code).toBe('Z2');
+    expect(palierDe(0.8).code).toBe('Z3');
+    expect(palierDe(0.95).code).toBe('Z4');
+    expect(palierDe(1.0).code).toBe('Z4');
+    expect(palierDe(1.05).code).toBe('Z5');
+    expect(palierDe(1.3).code).toBe('Z6');
+    expect(palierDe(2.5).code).toBe('Z7');
+  });
+  it('la conversion effort → watts est bornée par la physique (réserve sous le FTP, explosivité au-dessus)', () => {
+    const r = creerMonde({ seed: 2 }).riders[0]!;
+    r.E = 1; r.X = 1;
+    expect(wattsPour(r, 0.8)).toBeCloseTo(0.8 * r.profile.ftp, 6);
+    expect(wattsPour(r, 1.2)).toBeCloseTo(1.2 * r.profile.ftp, 6);
+    expect(wattsPour(r, 5)).toBeLessThan(5 * r.profile.ftp);             // la pointe plafonne
+    r.E = 0.1;
+    expect(wattsPour(r, 1)).toBeCloseTo(capSoutenu(r), 6);              // fatigué : on ne tient plus le FTP
+    r.E = 1; r.X = 0;
+    expect(wattsPour(r, 1.5)).toBeLessThanOrEqual(capSoutenu(r) + 1e-6); // plus d'explosivité : pas au-dessus
+  });
+  it('chaque décision porte un effort visé (ou null), un effort max et une fatigue max cohérents', () => {
+    const w = simuler(creerMonde({ seed: 4, trace: 'changements' }));
+    expect(w.trace.length).toBeGreaterThan(50);
+    for (const r of w.riders) {
+      const it = r.intent;
+      expect(it.effortMax).toBeGreaterThan(0);
+      expect(it.fatigueMax).toBeGreaterThan(0);
+      expect(it.fatigueMax).toBeLessThanOrEqual(1);
+      if (it.effort !== null) expect(it.effort).toBeLessThanOrEqual(it.effortMax + 1e-9);
+    }
+  });
+  it('Agir ne modifie jamais l\'intention : seule la décision (Vouloir) la change', () => {
+    const w = creerMonde({ seed: 6 });
+    for (let i = 0; i < 4; i++) pas(w);
+    let changementsHorsDecision = 0;
+    while (w.result.statut !== 'termine' && w.t < 900) {
+      const avant = w.riders.map((r) => `${r.intent.kind}|${r.intent.effort}|${r.intent.effortMax}|${r.intent.sprint}|${r.intent.cible}`);
+      const decisions = w.riders.map((r) => r.last?.t);
+      // une décision a lieu au début du pas ; on ne peut comparer qu'à travers elle : si `last` n'a pas bougé, l'intention n'a pas bougé
+      pas(w);
+      w.riders.forEach((r, i) => {
+        const apres = `${r.intent.kind}|${r.intent.effort}|${r.intent.effortMax}|${r.intent.sprint}|${r.intent.cible}`;
+        if (apres !== avant[i] && r.last?.t === decisions[i]) changementsHorsDecision++;
+      });
+    }
+    expect(changementsHorsDecision).toBe(0);
+  });
+  it('Agir déclare des événements, ils couvrent limite-atteinte, fin-burst, rejoint, passage-termine', () => {
+    const vus = new Set<string>();
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const w = creerMonde({ seed });
+      while (w.result.statut !== 'termine' && w.t < 1800) {
+        pas(w);
+        for (const r of w.riders) for (const e of r.evenements) vus.add(e.type);
+      }
+    }
+    expect(vus.has('limite-atteinte')).toBe(true);
+    expect(vus.has('fin-burst')).toBe(true);
+    expect(vus.has('rejoint')).toBe(true);
+    expect(vus.has('passage-termine')).toBe(true);
+  });
+});
+
+describe('v0.0.3a : groupes (vue dérivée)', () => {
+  it('les groupes partitionnent les coureurs en course, de la tête vers l\'arrière, sans « décroché » à l\'intérieur', () => {
+    const w = creerMonde({ seed: 8 });
+    for (let t = 0; t < 600; t += 1) {
+      for (let i = 0; i < 4; i++) pas(w);
+      const g = w.vue.groupes;
+      expect(g.flat().map((r) => r.id).sort()).toEqual(w.vue.ordre.map((r) => r.id).sort());
+      g.forEach((gr) => gr.forEach((r, i) => { if (i > 0) expect(r.decroche).toBe(false); }));
+      g.forEach((gr, k) => { if (k > 0) expect(gr[0]!.decroche).toBe(true); });
+      if (w.result.statut === 'termine') break;
+    }
+  });
+  it('un coureur perçoit la taille de son groupe', () => {
+    const w = creerMonde({ seed: 8 });
+    for (let i = 0; i < 12; i++) pas(w);
+    const r = w.riders[0]!;
+    expect(r.last!.percu.moi.groupeTaille).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('v0.0.3a : pointe normalisée par une constante nommée', () => {
+  it('pointeNorm borne à 0..1 sur la plage du POC', () => {
+    expect(pointeNorm(1100)).toBe(0);
+    expect(pointeNorm(1750)).toBe(1);
+    expect(pointeNorm(5000)).toBe(1);
+    expect(pointeNorm(1425)).toBeCloseTo(0.5, 6);
   });
 });
