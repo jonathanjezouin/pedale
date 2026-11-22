@@ -8,6 +8,9 @@ Jeu de cyclisme sur route, vue 100 % de dessus. On incarne un seul coureur, de l
 - Validation statistique du POC v0.0.1 : [`docs/v0.0.1-validation.md`](docs/v0.0.1-validation.md)
 - Route, vent et placement : [`docs/v0.0.1-trajectoires.md`](docs/v0.0.1-trajectoires.md)
 - Huit coureurs, pas de peloton : [`docs/v0.0.1-sans-peloton.md`](docs/v0.0.1-sans-peloton.md)
+- Frontières entre étages et comportement du coureur (proposition) : [`docs/v0.0.3-comportement.md`](docs/v0.0.3-comportement.md)
+- Scénario de bout en bout, chaîne complète (proposition) : [`docs/v0.0.3-chaine.md`](docs/v0.0.3-chaine.md)
+- Chaîne complète sur un scénario de bout en bout (brouillon) : [`docs/v0.0.3-chaine.md`](docs/v0.0.3-chaine.md)
 - POC graphique initial (HTML seul) : [`docs/poc-graphique/`](docs/poc-graphique/index.html)
 
 ## v0.0.2 — huit coureurs sur le plat
