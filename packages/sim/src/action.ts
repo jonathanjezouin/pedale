@@ -130,11 +130,8 @@ export function agir(w: World, r: Rider): Commande {
     }
     case 'suivre': {
       const a = it.cible !== null ? w.riders[it.cible] : undefined;
-      if (a && a.status === 'course') {
-        const gap = a.x - r.x - RIDER_LEN;
-        const vDes = clamp(a.v + 0.4 * (gap - 1.0), a.v - 3, a.v + 1.5);
-        return { yT: yAbrite(w, r, a), p: Math.min(pMax, puissanceVers(vDes, r.v, r, 1.4, FREINAGE_MAX)) };
-      }
+      // je saute dans la roue de l'attaquant avec l'empressement d'une prise de roue : plus l'écart est grand, plus je rattrape vite (l'abri vaut cher)
+      if (a && a.status === 'course') return { yT: yAbrite(w, r, a), p: suivre(w, a, r, 1.4) };
       return enGroupe(w, r, pMax, watts);
     }
     case 'gerer':

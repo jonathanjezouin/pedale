@@ -19,13 +19,18 @@ export const capf = (E: number) => 0.62 + 0.38 * clamp(E / 0.4, 0, 1);
 
 export const capSoutenu = (r: Rider) => r.profile.ftp * capf(r.E);
 
-/** Puissance maximale utilisable en effort explosif (au-dessus du FTP, limitée par l'explosivité restante). */
+/** Décroissance neuromusculaire d'un effort maximal : la puissance qu'on peut produire retombe avec le temps passé au-dessus de 1,25 × FTP
+ *  (≈ 100 % de la pointe à 5 s, ≈ 60 % à 15 s, ≈ 45 % à 30 s), en plus de l'épuisement de l'explosivité. Elle se récupère vite quand on relâche. */
+export const SPRINT = { seuil: 1.25, tau: 10, plancher: 0.4, recup: 0.5 };
+const facteurSprint = (r: Rider) => SPRINT.plancher + (1 - SPRINT.plancher) * Math.exp(-r.tSprint / SPRINT.tau);
+
+/** Puissance maximale utilisable en effort explosif (au-dessus du FTP, limitée par l'explosivité restante et par la décroissance neuromusculaire). */
 export function capExplosif(r: Rider): number {
   const s = capSoutenu(r);
   if (r.X < 0.02) return s;
   const k = Math.pow(clamp(r.X / 0.3, 0, 1), 0.6);
   const fE = 0.85 + 0.15 * clamp(r.E / 0.3, 0, 1);
-  return Math.max(s, r.profile.ftp + (r.profile.pPeak * fE - r.profile.ftp) * k);
+  return Math.max(s, r.profile.ftp + (r.profile.pPeak * fE - r.profile.ftp) * k * facteurSprint(r));
 }
 
 /** Conversion d'un effort (part du FTP) en watts : ce que le coureur vise, borné par ce que la physique lui permet
@@ -104,6 +109,7 @@ export function aspiration(self: Rider, others: Rider[]): number {
 /** Mise à jour des réserves (Skiba simplifié pour l'explosivité, usure cubique pour l'endurance). */
 export function consommer(r: Rider, p: number, dt: number): void {
   const ftp = r.profile.ftp;
+  if (p > SPRINT.seuil * ftp) r.tSprint += dt; else r.tSprint = Math.max(0, r.tSprint - SPRINT.recup * dt);
   const ratio = Math.min(p / ftp, 1.3);
   r.E = clamp(r.E - (ratio * ratio * ratio * dt) / r.profile.tEnd, 0, 1);
   if (p > ftp) {

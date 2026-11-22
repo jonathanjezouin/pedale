@@ -134,6 +134,7 @@ export interface Rider {
   x: number; y: number; v: number; p: number;
   E: number;  // réserve d'endurance 0..1
   X: number;  // explosivité disponible 0..1
+  tSprint: number;  // secondes cumulées à un effort neuromusculaire (au-dessus de 1,25 × FTP) : la puissance maximale retombe avec elles
   // état de course
   intent: IntentState;
   geste: Geste;
@@ -145,6 +146,7 @@ export interface Rider {
   attaqueVue: { id: number; t: number; vu: number } | null;   // attaque que je crois voir
   allure: { v: number; hist: number[]; tendance: number };    // allure du groupe telle que je la perçois
   enTetePrev: boolean;
+  suiviDePres: boolean;             // quelqu'un est collé à ma roue (à moins de 4 m derrière, dans la file)
   stats: RiderStats;
   evenements: EvenementDeclare[];   // déclarés par Agir depuis la dernière décision
   decroche: boolean;       // à plus de ~40 m du coureur juste devant (avec hystérésis)

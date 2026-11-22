@@ -71,6 +71,7 @@ function observerUn(w: World, r: Rider, act: Rider[]) {
     vus.push({ id: o.id, letter: o.letter, dx, dy, vRel, posture: o.posture, enLigne: enLigne(w, o, 0.9), accel: s.accel });
   }
   r.vus = vus;
+  r.suiviDePres = vus.some((q) => q.dx < 0 && q.dx > -4 && q.enLigne);
 
   // allure du groupe telle que je la perçois : médiane des vitesses que j'estime, moi compris, parmi ceux de mon groupe en vue
   const groupe = w.vue.groupes.find((g) => g.includes(r)) ?? [r];
@@ -94,7 +95,9 @@ function observerUn(w: World, r: Rider, act: Rider[]) {
     if (q.vRel > 1.2 && (q.accel > 0.3 || q.posture === 2) && (!cand || q.vRel > cand.vRel)) cand = q;
   }
   if (cand) {
-    if (!r.attaqueVue || r.attaqueVue.id !== cand.id) { r.attaqueVue = { id: cand.id, t, vu: t }; r.intent.forceEval = 'attaque'; }
+    // celui qui est lancé dans son sprint ne se laisse plus distraire : il va au bout
+    const enSprint = r.intent.kind === 'attaquer' && r.intent.sprint;
+    if (!r.attaqueVue || r.attaqueVue.id !== cand.id) { r.attaqueVue = { id: cand.id, t, vu: t }; if (!enSprint) r.intent.forceEval = 'attaque'; }
     else r.attaqueVue.vu = t;
   } else if (r.attaqueVue && t - r.attaqueVue.vu > 5) r.attaqueVue = null;
 }

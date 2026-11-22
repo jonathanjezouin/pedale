@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { creerMonde, pas, simuler, dureeMax, dangerSuppose, dispositionDe, PLACE_LABEL, INTENTION_LABEL, expliquer, aspiration, aspirationValeur, ASPIRATION, puissanceVers, wattsPour, capSoutenu, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF, niveauDe, durabilitePct, ftpWkg, lecture, palierDe, PALIERS, pointeNorm } from '../src/index';
 import { executionDe } from '../src/scenario';
 import { porteOuverte } from '../src/action';
-import { PLANCHER, vitesseSolo, capf, axeY, enLigne } from '../src/index';
+import { PLANCHER, vitesseSolo, capf, axeY, enLigne, EFFORT_PHYSIQUE, SPRINT, capExplosif, consommer, distanceSprint } from '../src/index';
 
 describe('simulation v0.0.1', () => {
   it('est déterministe : même seed, même course', () => {
@@ -547,5 +547,78 @@ describe('v0.0.3c : plancher et place au moindre effort', () => {
       if (w.riders.filter((r) => r.stats.relaisPris > 0).length >= 3) tousMenent++;
     }
     expect(tousMenent).toBeGreaterThanOrEqual(3);
+  }, 120000);
+});
+
+describe('v0.0.3d : modèle de sprint', () => {
+  it('un sprint est borné par la physique, pas par un multiple du FTP : la pointe du sprinteur compte', () => {
+    const w = creerMonde({ seed: 1 });
+    for (const r of w.riders) {
+      r.E = 1; r.X = 1; r.tSprint = 0;
+      expect(wattsPour(r, EFFORT_PHYSIQUE)).toBeCloseTo(capExplosif(r), 6);
+      expect(capExplosif(r)).toBeGreaterThan(0.85 * r.profile.pPeak * 0.9);          // proche de la pointe
+      if (r.archetype === 'sprinteur') expect(wattsPour(r, EFFORT_PHYSIQUE)).toBeGreaterThan(3.5 * r.profile.ftp);
+    }
+    const sprinteurs = w.riders.filter((r) => r.archetype === 'sprinteur'), autres = w.riders.filter((r) => r.archetype === 'attaquant');
+    expect(Math.min(...sprinteurs.map((r) => capExplosif(r)))).toBeGreaterThan(Math.max(...autres.map((r) => capExplosif(r))));
+  });
+  it('la puissance maximale retombe avec le temps passé à fond (décroissance neuromusculaire), et se récupère quand on relâche', () => {
+    const r = creerMonde({ seed: 2 }).riders[0]!;
+    r.E = 1; r.X = 1; r.tSprint = 0;
+    const p0 = capExplosif(r);
+    r.tSprint = 15;
+    const p15 = capExplosif(r);
+    r.tSprint = 30;
+    const p30 = capExplosif(r);
+    expect(p15).toBeLessThan(p0 * 0.85); expect(p30).toBeLessThan(p15);
+    expect(p30).toBeGreaterThan(r.profile.ftp);
+    r.tSprint = 0; r.X = 1;
+    for (let i = 0; i < 40; i++) consommer(r, SPRINT.seuil * r.profile.ftp * 1.3, 0.25);   // 10 s à fond
+    expect(r.tSprint).toBeCloseTo(10, 5);
+    for (let i = 0; i < 40; i++) consommer(r, 0.5 * r.profile.ftp, 0.25);                   // 10 s tranquille
+    expect(r.tSprint).toBeLessThan(10 - 4);
+  });
+  it('celui qui est lancé dans son sprint va au bout : il ne se ravise pas parce qu\'un autre attaque', () => {
+    let abandons = 0, sprints = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const w = creerMonde({ seed });
+      const enSprint = new Set<number>();
+      while (w.result.statut !== 'termine' && w.t < 3000) {
+        pas(w);
+        for (const r of w.riders) {
+          if (r.status !== 'course') { enSprint.delete(r.id); continue; }
+          if (r.intent.kind === 'attaquer' && r.intent.sprint) { if (!enSprint.has(r.id)) sprints++; enSprint.add(r.id); }
+          else if (enSprint.has(r.id)) { abandons++; enSprint.delete(r.id); }
+        }
+      }
+    }
+    expect(sprints).toBeGreaterThan(30);
+    expect(abandons / sprints).toBeLessThan(0.1);
+  });
+  it('quand quelqu\'un attaque, « se placer » est impossible (ça part, trop tard pour se placer)', () => {
+    let avecAttaque = 0;
+    for (const seed of [1, 2, 3]) {
+      const w = simuler(creerMonde({ seed, trace: 'complet' }));
+      for (const d of w.trace) if (d.percu.rivaux.attaque) { avecAttaque++; expect(d.evaluations.find((e) => e.intention === 'placer')!.vetos.length).toBeGreaterThan(0); }
+    }
+    expect(avecAttaque).toBeGreaterThan(20);
+  });
+  it('avec quelqu\'un collé à sa roue, on lance son sprint moins tôt (on garde une marge)', () => {
+    const w = creerMonde({ seed: 4 });
+    const r = w.riders[0]!; r.X = 1; r.E = 0.8;
+    r.suiviDePres = false; const seul = distanceSprint(r);
+    r.suiviDePres = true; const suivi = distanceSprint(r);
+    expect(suivi).toBeLessThan(seul);
+  });
+  it('le final se joue au sprint et les quatre profils peuvent gagner', () => {
+    const gagnants = new Set<string>(); let serres = 0, n = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const w = simuler(creerMonde({ seed }));
+      gagnants.add(w.riders[w.result.vainqueur!]!.archetype);
+      const [a, b] = w.result.ordre; n++;
+      if (w.riders[b!]!.finishTime! - w.riders[a!]!.finishTime! < 2) serres++;
+    }
+    expect([...gagnants].sort()).toEqual(['attaquant', 'opportuniste', 'rouleur', 'sprinteur']);
+    expect(serres / n).toBeGreaterThan(0.5);
   }, 120000);
 });

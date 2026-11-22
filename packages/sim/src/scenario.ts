@@ -67,13 +67,13 @@ export function creerMonde(partiel: Partial<Config> & { seed: number }): World {
     const profile = creerProfil(arch, r);
     return {
       id: i, letter: String.fromCharCode(65 + i), archetype: arch, profile,
-      x: 0, y: 0, v: 0, p: 0,
+      x: 0, y: 0, v: 0, p: 0, tSprint: 0,
       E: clamp(range(r, 0.62, 0.85) * (0.9 + 0.1 * (profile.tEnd / 2700)), 0.3, 1), X: range(r, 0.92, 1),
       intent: { kind: null, since: 0, commitUntil: 0, nextEval: 0, sprint: false, cible: null, effort: null, effortMax: 1, fatigueMax: 1, place: 'garder', placeAtteinte: false, forceEval: 'depart' },
       geste: { nature: null, phase: '', phaseSince: 0, vHold: 0, side: -1, limiteT: -1e9, surLimiteDepuis: -1, roueT: -1e9, enSuivi: false, place: null, roueId: null, vRoue: 0, dyAbri: 0, sensAbri: 1, abriPrev: 0, abriT: 0, latErr: 0, porteDepuis: -1 },
       exec: executionDe(profile.experience),
       rng: mulberry32((cfg.seed * 2654435761 + (i + 1) * 40503) ^ 0xb01d),
-      biais: { reserve: 0, explosivite: 0 }, memoire: {}, vus: [], attaqueVue: null, allure: { v: 0, hist: [], tendance: 0 }, enTetePrev: false,
+      biais: { reserve: 0, explosivite: 0 }, memoire: {}, vus: [], attaqueVue: null, allure: { v: 0, hist: [], tendance: 0 }, enTetePrev: false, suiviDePres: false,
       evenements: [],
       stats: {
         leadTime: 0, leadRecent: 0, relaisPris: 0, attaques: 0, lastAttackT: -1e9,

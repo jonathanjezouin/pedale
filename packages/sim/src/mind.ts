@@ -11,7 +11,7 @@ import { INTENTIONS, ARCHETYPE_LABEL } from './types';
 import { capf, E_CUIT, resistance, vitesseSolo, wattsPour, X_MIN } from './physics';
 import { clamp, smoothstep } from './util';
 import { abrite, enLigne } from './placement';
-import { PLANCHER } from './paliers';
+import { EFFORT_PHYSIQUE, PLANCHER } from './paliers';
 import { bruitDe, dangerSuppose, dispositionDe, gauss } from './observation';
 
 /** Tous les « boutons » de réglage des raisons au même endroit (équilibrage par le batch). */
@@ -27,9 +27,12 @@ export const TUNE = {
  *  un peu plus tôt s'il est agressif, un peu plus tard s'il a une grosse pointe. */
 export function distanceSprint(r: Rider): number {
   const p = r.profile;
-  const dureeTenable = (r.X * p.wPrime) / (0.75 * Math.max(100, p.pPeak - p.ftp));   // s
+  // durée que l'explosivité permet, bornée par la décroissance neuromusculaire (au-delà de ~18 s, la puissance retombe trop pour qu'un sprint tienne)
+  const dureeTenable = Math.min(18, (r.X * p.wPrime) / (0.75 * Math.max(100, p.pPeak - p.ftp)));   // s
   const f = 1.05 - 0.15 * p.pointe + 0.15 * p.agressivite;
-  return Math.round(clamp(f * dureeTenable * 12.5, 110, 480));
+  // quelqu'un collé à ma roue me passera si je pars à bout de souffle : je garde une marge
+  const marge = r.suiviDePres ? 0.75 : 1;
+  return Math.round(clamp(f * dureeTenable * 12.5 * marge, 110, 480));
 }
 
 /** Durée d'engagement minimale de chaque intention (§6.2). */
@@ -144,15 +147,15 @@ export function contrat(r: Rider, p: Percu, ip: Interprete, k: Intention, ctx: C
     }
     case 'attaquer': {
       cible = null;
-      const burstFini = !ctx.change && !ctx.sprint && (ctx.evts.includes('fin-burst') || (ctx.prev.effort !== null && ctx.prev.effort < 3));
-      if (ctx.sprint) { effort = 3.0; effortMax = 3.0; fatigueMax = 1.0; }                                  // tout ce que la physique permet
+      const burstFini = !ctx.change && !ctx.sprint && (ctx.evts.includes('fin-burst') || (ctx.prev.effort !== null && ctx.prev.effort < EFFORT_PHYSIQUE));
+      if (ctx.sprint) { effort = EFFORT_PHYSIQUE; effortMax = EFFORT_PHYSIQUE; fatigueMax = 1.0; }          // tout ce que la physique permet
       else if (burstFini) { effort = 1.07; effortMax = 1.07; fatigueMax = Math.max(fat, 0.8); }
-      else { effort = 3.0; effortMax = 3.0; fatigueMax = Math.max(fat, 0.8); }
+      else { effort = EFFORT_PHYSIQUE; effortMax = EFFORT_PHYSIQUE; fatigueMax = Math.max(fat, 0.8); }
       break;
     }
     case 'suivre':
       cible = p.rivaux.attaque ? p.rivaux.attaque.id : null;
-      effortMax = 3.0; fatigueMax = Math.max(fat, 0.8);
+      effortMax = EFFORT_PHYSIQUE; fatigueMax = Math.max(fat, 0.8);
       break;
     case 'revenir':
       cible = null; effortMax = 1.12; fatigueMax = Math.max(fat, 0.85);
@@ -320,6 +323,7 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         if (sansExplosif) vetos.push("Je n'ai plus d'explosivité");
         if (p.moi.decroche) vetos.push("Je suis décroché : j'ai quelqu'un à rattraper");
         if (p.moi.rangDansGroupe <= 1) vetos.push('Je suis déjà aux avant-postes de mon groupe');
+        if (p.rivaux.attaque) vetos.push(`${p.rivaux.attaque.letter} attaque : ça part, trop tard pour se placer`);
         mk(raisons, 'proche', "L'arrivée approche : je veux être bien placé", 4 * (1 - smoothstep(1500, 6000, d)));
         mk(raisons, 'danger', `${it.dangerLetter ?? 'Un rival'} est dangereux : je reste près de l'avant`, 1.0 * it.dangerMax);
         mk(raisons, 'sprint', 'Mon sprint se joue sur la position', 1.5 * it.sprintFocus * (1 - smoothstep(1000, 5000, d)));
@@ -349,13 +353,16 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
       }
       case 'attaquer': {
         const sprintD = distanceSprint(r);
+        // un sprint lancé se termine : la distance qu'il me reste ne se compare plus à ce que mon explosivité (qui baisse) me permettrait de lancer
+        const enSprint = r.intent.kind === 'attaquer' && r.intent.sprint;
         // à l'approche de la ligne on ne ménage plus rien : être « cuit » n'interdit pas de finir son sprint
-        if (cuit && !(d <= sprintD)) vetos.push('Je suis cuit : plus de réserve pour attaquer');
-        if (sansExplosif && !(r.intent.kind === 'attaquer' && r.intent.sprint)) vetos.push("Je n'ai plus d'explosivité");
-        if (p.moi.decroche && !(d <= sprintD)) vetos.push("Je suis décroché : j'ai quelqu'un à rattraper avant d'attaquer");
+        if (cuit && !(d <= sprintD) && !enSprint) vetos.push('Je suis cuit : plus de réserve pour attaquer');
+        if (sansExplosif && !enSprint) vetos.push("Je n'ai plus d'explosivité");
+        if (p.moi.decroche && !(d <= sprintD) && !enSprint) vetos.push("Je suis décroché : j'ai quelqu'un à rattraper avant d'attaquer");
         const fenetre = smoothstep(500, 1200, d) * (1 - smoothstep(4000, 9000, d));
         const dmax = 3000 + 4000 * prof.agressivite;
-        const dernier = clamp(1 - (w.t - r.stats.lastAttackT) / 600, 0, 1);
+        // « je viens déjà d'essayer » vise les tentatives précédentes, pas l'attaque que je suis en train de mener
+        const dernier = r.intent.kind === 'attaquer' ? 0 : clamp(1 - (w.t - r.stats.lastAttackT) / 600, 0, 1);
         mk(raisons, 'pointe', 'Ma pointe de vitesse ne me permet pas de gagner au sprint', 1.5 * clamp((0.6 - prof.pointe) / 0.3, 0, 1));
         mk(raisons, 'distance', 'Il reste peu de distance, mais assez pour tenter', 1.5 * fenetre);
         mk(raisons, 'agressif', 'Mon tempérament est agressif', 2.3 * prof.agressivite);
@@ -370,7 +377,7 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
           mk(raisons, 'passe', `Je suis parti et j'ai ${Math.round(avance)} m d'avance : ça passe`, 4 * clamp(avance / 25, 0, 1));
           mk(raisons, 'suivi', "On me suit : ça ne passe pas", -3 * clamp(1 - avance / 15, 0, 1));
         }
-        if (d <= sprintD && d > 0) mk(raisons, 'sprint', `Il reste ${Math.round(d)} m : je lance mon sprint`, 9);
+        if ((d <= sprintD || enSprint) && d > 0) mk(raisons, 'sprint', `Il reste ${Math.round(d)} m : ${enSprint ? 'je suis lancé, je vais au bout' : 'je lance mon sprint'}`, 9);
         break;
       }
       case 'suivre': {
@@ -388,7 +395,8 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         mk(raisons, 'cuit', 'Je suis cuit', -5 * it.reserveBasse);
         mk(raisons, 'sprint', 'Je garde mon explosivité pour le sprint', -3.0 * it.sprintFocus * (d > 1500 ? 1 : 0.3));
         mk(raisons, 'laisserPartir', 'Si je le laisse partir, je ne pourrai pas gagner au sprint', 3.0 * it.sprintFocus * (1 - smoothstep(1000, 3000, d)));
-        if (a) mk(raisons, 'avance', `${a.letter} a déjà ${Math.round(a.avance)} m d'avance`, -1.5 * clamp((a.avance - 20) / 40, 0, 1));
+        // courir après quelqu'un qui a déjà de l'avance, c'est brûler son explosivité sans reprendre sa roue ; s'il est parti de loin, il va faiblir : je garde mes forces pour mon propre lancement
+        if (a) mk(raisons, 'avance', `${a.letter} a déjà ${Math.round(a.avance)} m d'avance : me griller pour le suivre ne sert à rien, il va faiblir`, -4 * clamp((a.avance - 12) / 25, 0, 1));
         break;
       }
       case 'gerer': {

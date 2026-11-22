@@ -1,6 +1,14 @@
 # Journal des versions
 
 ## v0.0.3
+### v0.0.3d — modèle de sprint
+- **Plafond de sprint à 3 × FTP supprimé** (défaut de la v0.0.3a) : un sprint est borné par `capExplosif` (pointe, explosivité, fatigue), pas par un multiple du FTP. La pointe du sprinteur compte enfin.
+- **Un sprint lancé va au bout** (défaut de la v0.0.3b) : plus d'abandon quand un autre attaque ou quand la distance de sprint calculée rétrécit avec l'explosivité (15 % des sprints étaient abandonnés) ; « je viens déjà d'essayer » ne pénalise plus l'attaque en cours ; « se placer » impossible quand ça part.
+- **Décroissance neuromusculaire** de la puissance maximale au fil du sprint (`SPRINT`), durée de sprint tenable bornée à 18 s.
+- **Marge quand on est suivi** (distance de lancement −25 %), **ne pas courir après un attaquant déjà loin** (raison `avance`), prise de roue empressée pour « suivre ».
+- Batch (300 courses, v0.0.3c → v0.0.3d) : **victoires rouleur / sprinteur / attaquant / opportuniste 31 / 3 / 54 / 11 → 32 / 10 / 38 / 20 %** ; arrivées au sprint (< 2 s) 53 → 75 % ; victoires détachées (> 4 s) 22 → 9 % ; 36,6 km/h, aucune course neutralisée. Le sprinteur reste à ~10 % (voir `v0.0.3-comportement.md` §10).
+- Tests : 49 → 55.
+
 ### v0.0.3c — plancher et place au moindre effort
 - **Plancher** : 87 % du FTP (haut de Z3), multiplié par la fraîcheur : l'effort qu'on tient longtemps. Sans raison supplémentaire, on roule à son plancher ; en tête, « garder des forces » n'est plus une raison de refuser un effort qui ne coûte presque rien. L'allure du groupe devient celle du plancher du meneur.
 - **Place au moindre effort** : la place visée `derriere` cible un coureur (le dernier qui roule, la queue, un cran plus loin quand on est à la peine). Remplace « glisser jusqu'à la queue ». « Inconnu » compte comme relayeur.
