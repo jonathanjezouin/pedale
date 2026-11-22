@@ -1,0 +1,15 @@
+{
+  "name": "@pedale/parcours",
+  "version": "0.0.4",
+  "private": true,
+  "type": "module",
+  "description": "Pédale — génération et évaluation de parcours (profil altimétrique, tracé en plan). Module pur, indépendant de la simulation.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": { "vitest": "^3.2.0", "typescript": "^5.9.0" }
+}

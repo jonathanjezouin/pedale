@@ -1,5 +1,14 @@
 # Journal des versions
 
+## v0.0.4 — module de parcours
+- **`packages/parcours`** : `genererParcours({ seed, distance, type })` (profil altimétrique et tracé en plan, étape en ligne de 20 à 250 km, plate / vallonnée / montagne, finale tirée selon le type) et **`evaluer(profil, de, à, arrivée)`** (fonction pure : montées détectées et classées HC à 4e, poids selon la distance à l'arrivée, probabilités sprint / puncheur / grimpeur, usure, durée estimée, phrase lisible). Indépendant de la simulation, pas encore branché sur la course.
+- Le nombre d'éléments se déduit du D+ visé donc de la distance (un col sur 20 km, trois ou plus sur 250 km) ; col décisif dans les 40 derniers km en montagne ; pentes bornées, raccords arrondis ; contrôle par l'évaluateur avec retirage (10 essais).
+- Tracé en plan lié au relief : plaine droite et large, vallonné modéré, montagne en lacets doux (rayon ≥ 80 m) ; jamais de recoupement.
+- **Atelier de parcours** (`npm run atelier`, `apps/atelier`) : distance, type, finale, seed → profil coloré par la pente avec les montées classées, tracé vu de dessus, évaluation, et « évaluer le reste de l'étape depuis le km X ».
+- **Validation par lot** (`npm run parcours -- --n 1000`) : 1 000 étapes par type ; 100 % dans les fourchettes de D+/km, 98 à 100 % de conformité au premier tirage, 0 recoupement, 0 pente hors bornes ; 12 s pour 1 000 étapes.
+- Défauts trouvés par la validation : tracés de montagne qui se recoupaient (72 %), cols lus comme deux montées, fond qui amplifiait les montées, erreur d'unité dans la forme des montées.
+- Tests : 33 pour le module (55 pour la simulation). Passage en v0.0.4 (numéros de version, titre de l'interface). Détail : `docs/v0.0.4-parcours.md`.
+
 ## v0.0.3
 ### v0.0.3d — modèle de sprint
 - **Plafond de sprint à 3 × FTP supprimé** (défaut de la v0.0.3a) : un sprint est borné par `capExplosif` (pointe, explosivité, fatigue), pas par un multiple du FTP. La pointe du sprinteur compte enfin.

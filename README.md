@@ -10,11 +10,11 @@ Jeu de cyclisme sur route, vue 100 % de dessus. On incarne un seul coureur, de l
 - Huit coureurs, pas de peloton : [`docs/v0.0.1-sans-peloton.md`](docs/v0.0.1-sans-peloton.md)
 - Comportement du coureur : frontières entre étages, contrat Vouloir → Agir, intentions (validé) : [`docs/v0.0.3-comportement.md`](docs/v0.0.3-comportement.md)
 - Chaîne complète sur un scénario de bout en bout (validé) : [`docs/v0.0.3-chaine.md`](docs/v0.0.3-chaine.md)
-- Génération de parcours (profil, tracé, évaluation) — spécification : [`docs/v0.0.3-parcours.md`](docs/v0.0.3-parcours.md)
+- Génération de parcours (profil, tracé, évaluation) — spécification : [`docs/v0.0.3-parcours.md`](docs/v0.0.3-parcours.md) ; module implémenté (v0.0.4) : [`docs/v0.0.4-parcours.md`](docs/v0.0.4-parcours.md)
 - **Plan de développement jusqu'à la v0.1.0** : [`docs/v0.1.0-plan.md`](docs/v0.1.0-plan.md)
 - POC graphique initial (HTML seul) : [`docs/poc-graphique/`](docs/poc-graphique/index.html)
 
-## v0.0.3 — huit coureurs sur le plat, raisonnement individuel
+## v0.0.4 — huit coureurs sur le plat, raisonnement individuel ; module de parcours
 
 Huit coureurs qui s'affrontent, chacun pour soi, sur une route qui tourne avec un vent fixe (pas de peloton poursuivant ; des groupes se forment, c'est tout). Chaque coureur
 raisonne par étages — **percevoir → interpréter → vouloir → agir** — avec 7 intentions (s'abriter, se placer, participer, attaquer, suivre, revenir, gérer) et des raisons nommées ; il ne connaît pas les autres, il les déduit de ce qu'il voit.
@@ -26,6 +26,8 @@ Cliquer un coureur (ou `Tab`) affiche **pourquoi** il fait ce qu'il fait.
 npm install
 npm run dev          # jeu dans le navigateur : http://localhost:5173  (?seed=1234&biome=desert)
 npm test             # tests du cœur de simulation (Vitest)
+npm run atelier      # atelier de parcours : http://localhost:5174  (?km=150&type=montagne&finale=descente&seed=7)
+npm run parcours -- --n 1000   # validation du générateur de parcours : 1 000 étapes par type
 npm run batch -- --n 500    # 500 courses sans affichage + critères de réussite (§6.6) ; --vent face --route droite pour l'ancien mode
 npm run build        # build web (apps/game/dist)
 npm run electron     # build + fenêtre Electron
@@ -39,6 +41,8 @@ Paramètres d'URL : `?seed=1234&biome=desert&vent=face&route=droite`. **Relectur
 
 ```
 packages/sim/    cœur de simulation pur TypeScript (aucune dépendance) : physique, perception, décision, action, trace
+packages/parcours/ génération et évaluation de parcours (profil altimétrique, tracé en plan), pur TypeScript
+apps/atelier/    atelier de parcours (page de développement)
 tools/batch/     courses en masse sans affichage, validation des critères de réussite
 apps/game/       rendu PixiJS + interface HTML + coquille Electron (Windows / Steam)
 docs/            conception, choix techniques, validation

@@ -1,11 +1,18 @@
 {
   "name": "@pedale/batch",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "scripts": {
-    "batch": "tsx src/run.ts"
+    "batch": "tsx src/run.ts",
+    "parcours": "tsx src/parcours.ts"
   },
-  "dependencies": { "@pedale/sim": "*" },
-  "devDependencies": { "tsx": "^4.20.0", "typescript": "^5.9.0" }
+  "dependencies": {
+    "@pedale/sim": "*",
+    "@pedale/parcours": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
 }
