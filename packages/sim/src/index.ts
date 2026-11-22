@@ -7,3 +7,5 @@ export { pas, simuler } from './world';
 export { percevoir, interpreter, evaluer, TUNE, distanceSprint, engagement } from './mind';
 export { expliquer, resumeEvaluations } from './trace';
 export { mulberry32 } from './rng';
+export { ANCRAGES, NIVEAUX, VELO_KG, ftpWkg, durabilitePct, niveauDe, lecture } from './calibration';
+export type { Attribut, Niveau } from './calibration';

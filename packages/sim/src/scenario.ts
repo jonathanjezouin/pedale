@@ -3,13 +3,15 @@ import { mulberry32, range, shuffle } from './rng';
 import { vitesseSolo } from './physics';
 import { creerRoute } from './road';
 import { clamp } from './util';
+import { VELO_KG } from './calibration';
 
-/** Les quatre archétypes du POC (§6.4). Valeurs de base, ensuite perturbées par la seed. */
-const BASE: Record<Archetype, Omit<Profile, 'pointe' | 'objectif' | 'experience' | 'mass' | 'cda' | 'lateral'>> = {
-  rouleur:      { cp: 342, wPrime: 17000, pPeak: 950,  tEnd: 3000, generosite: 0.85, agressivite: 0.25 },
-  sprinteur:    { cp: 336, wPrime: 22000, pPeak: 1400, tEnd: 2800, generosite: 0.25, agressivite: 0.20 },
-  attaquant:    { cp: 335, wPrime: 24000, pPeak: 1060, tEnd: 2600, generosite: 0.50, agressivite: 0.90 },
-  opportuniste: { cp: 334, wPrime: 20000, pPeak: 1150, tEnd: 2700, generosite: 0.35, agressivite: 0.50 },
+/** Les quatre archétypes du POC (§6.4), calibrés WorldTour (docs/v0.0.3-attributs.md). Valeurs de base, ensuite perturbées par la seed.
+ *  `ftp` en W/kg sur le coureur seul : la puissance critique absolue en découle avec la masse tirée. */
+const BASE: Record<Archetype, { ftp: number; wPrime: number; pPeak: number; tEnd: number; generosite: number; agressivite: number }> = {
+  rouleur:      { ftp: 5.8, wPrime: 19000, pPeak: 1200, tEnd: 3000, generosite: 0.85, agressivite: 0.25 },
+  sprinteur:    { ftp: 5.6, wPrime: 24000, pPeak: 1750, tEnd: 2800, generosite: 0.25, agressivite: 0.20 },
+  attaquant:    { ftp: 5.7, wPrime: 27000, pPeak: 1350, tEnd: 2600, generosite: 0.50, agressivite: 0.90 },
+  opportuniste: { ftp: 5.7, wPrime: 22000, pPeak: 1450, tEnd: 2700, generosite: 0.35, agressivite: 0.50 },
 };
 const ARCH: Archetype[] = ['rouleur', 'sprinteur', 'attaquant', 'opportuniste'];
 
@@ -31,9 +33,10 @@ export function configParDefaut(seed: number): Config {
 function creerProfil(arch: Archetype, r: () => number): Profile {
   const b = BASE[arch];
   const j = (v: number, pct: number) => v * (1 + (r() * 2 - 1) * pct);
+  const mass = range(r, 70, 78);
   const p: Profile = {
-    cp: j(b.cp, 0.04), wPrime: j(b.wPrime, 0.08), pPeak: j(b.pPeak, 0.05), tEnd: j(b.tEnd, 0.10),
-    mass: range(r, 70, 78), cda: range(r, 0.30, 0.34),
+    cp: j(b.ftp, 0.04) * (mass - VELO_KG), wPrime: j(b.wPrime, 0.08), pPeak: j(b.pPeak, 0.05), tEnd: j(b.tEnd, 0.10),
+    mass, cda: range(r, 0.30, 0.34),
     generosite: clamp(b.generosite + (r() - 0.5) * 0.2, 0, 1),
     agressivite: clamp(b.agressivite + (r() - 0.5) * 0.2, 0, 1),
     experience: range(r, 0.3, 0.9),
@@ -41,7 +44,7 @@ function creerProfil(arch: Archetype, r: () => number): Profile {
     pointe: 0,
     objectif: 'gagner',
   };
-  p.pointe = clamp((p.pPeak - 850) / (1400 - 850), 0, 1);
+  p.pointe = clamp((p.pPeak - 1100) / (1750 - 1100), 0, 1);
   return p;
 }
 

@@ -1,6 +1,9 @@
 # Journal des versions
 
-## À venir (v0.0.3)
+## v0.0.3 (en cours)
+- **Attributs** : conception documentée (`docs/v0.0.3-attributs.md`) : niveaux ancrés WorldTour, FTP en W/kg au centre, pas de score affiché, durabilité en % du FTP après 3000 kJ.
+- **Calibration** (`calibration.ts`) : ancrages et niveaux en données ; coureurs du POC recalés WorldTour (FTP 5,4-6,0 W/kg, pointe jusqu'à 1800 W).
+- Rapport batch § 6 : répartition par niveau et profils incohérents. Interface : FTP en W/kg et son niveau ; plus de pourcentages de générosité/agressivité.
 - Spécification de la **génération de parcours** (profil altimétrique, tracé, évaluation d'étape) : `docs/v0.0.3-parcours.md`. Conception seulement, rien n'est codé.
 
 ## v0.0.2
