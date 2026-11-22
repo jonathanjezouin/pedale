@@ -4,6 +4,7 @@ Jeu de cyclisme sur route, vue 100 % de dessus. On incarne un seul coureur, de l
 
 - Conception fonctionnelle : [`docs/v0.0.1-design-fonctionnel.md`](docs/v0.0.1-design-fonctionnel.md)
 - Choix techniques : [`docs/stack-technique.md`](docs/stack-technique.md)
+- Attributs du coureur (paliers WorldTour) : [`docs/v0.0.3-attributs.md`](docs/v0.0.3-attributs.md)
 - Validation statistique du POC v0.0.1 : [`docs/v0.0.1-validation.md`](docs/v0.0.1-validation.md)
 - Route, vent et placement : [`docs/v0.0.1-trajectoires.md`](docs/v0.0.1-trajectoires.md)
 - Huit coureurs, pas de peloton : [`docs/v0.0.1-sans-peloton.md`](docs/v0.0.1-sans-peloton.md)
