@@ -1,10 +1,10 @@
 /* Interface HTML : fil de course, liste des coureurs, explication « pourquoi ? », fin de course. */
-import { ARCHETYPE_LABEL, INTENTION_LABEL, NIVEAUX, expliquer, ftpWkg, libellePalier, niveauDe, palierDe, resumeEvaluations } from '@pedale/sim';
+import { ARCHETYPE_LABEL, INTENTION_LABEL, NIVEAUX, PLACE_LABEL, expliquer, ftpWkg, libellePalier, niveauDe, palierDe, resumeEvaluations } from '@pedale/sim';
 import type { Intention, Rider, SimEvent, World } from '@pedale/sim';
 import { PALETTES } from './riders';
 
 export const INTENT_COLOR: Record<Intention, string> = {
-  relais: '#e4572e', abriter: '#2a6fdb', rabattre: '#8e6bd1', attaquer: '#d62839', suivre: '#e49a2e', gerer: '#7a7f87', revenir: '#1aa39a',
+  participer: '#e4572e', abriter: '#2a6fdb', placer: '#8e6bd1', attaquer: '#d62839', suivre: '#e49a2e', gerer: '#7a7f87', revenir: '#1aa39a',
 };
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 export const fmtT = (s: number) => `${Math.floor(s / 60)}'${String(Math.floor(s % 60)).padStart(2, '0')}"`;
@@ -100,7 +100,7 @@ export function updateTrace(w: World, id: number) {
     <div class="who">Coureur ${r.letter}, ${ARCHETYPE_LABEL[r.archetype]}</div>
     <div class="muted">à ${fmtKm(d.distRestante)} de l'arrivée · FTP ${ftpWkg(r.profile).toFixed(1).replace('.', ',')} W/kg (${NIVEAUX[niveauDe('ftp', ftpWkg(r.profile))]}) · pointe ${Math.round(r.profile.pPeak)} W</div>
     <div class="sec"><b>Perçu</b><div class="pills">${pills.map((t) => `<span>${t}</span>`).join('')}</div>
-      <div class="muted">Réel : réserve ${Math.round(d.reel.reserve * 100)} % — perception exacte en v0.0.1 (pas de bruit).</div></div>
+      <div class="muted">Réel : réserve ${Math.round(d.reel.reserve * 100)} % — le coureur la ressent à ${Math.round(p.moi.reserve * 100)} % (approximatif).</div></div>
     <div class="sec"><b>Interprété</b>${cap(it.phrases.join(', '))}.</div>
     <div class="sec"><b>Intention</b><span class="chip" style="--c:${INTENT_COLOR[d.intention]}">${INTENTION_LABEL[d.intention]}${sprint}</span>
       <span class="muted"> engagée jusqu'à ${d.engagementJusqua === Infinity ? 'la ligne' : fmtT(d.engagementJusqua)}</span>
@@ -117,7 +117,8 @@ export function updateTrace(w: World, id: number) {
 function limitesTexte(r: Rider): string {
   const i = r.intent;
   const visé = i.effort === null ? 'effort : celui qu\'il faut pour tenir la roue' : `effort visé : ${libellePalier(i.effort)}`;
-  return `${visé} · accepte jusqu'à ${palierDe(i.effortMax).code} (${Math.round(i.effortMax * 100)} %) · fatigue max ${Math.round(i.fatigueMax * 100)} %`;
+  const groupe = i.kind === 'abriter' || i.kind === 'placer' || i.kind === 'participer' ? ` · place visée : ${PLACE_LABEL[i.place]}` : '';
+  return `${visé} · accepte jusqu'à ${palierDe(i.effortMax).code} (${Math.round(i.effortMax * 100)} %) · fatigue max ${Math.round(i.fatigueMax * 100)} %${groupe}`;
 }
 
 /* ---------------- fil de course ---------------- */

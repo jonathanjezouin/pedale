@@ -14,10 +14,10 @@ Jeu de cyclisme sur route, vue 100 % de dessus. On incarne un seul coureur, de l
 - **Plan de développement jusqu'à la v0.1.0** : [`docs/v0.1.0-plan.md`](docs/v0.1.0-plan.md)
 - POC graphique initial (HTML seul) : [`docs/poc-graphique/`](docs/poc-graphique/index.html)
 
-## v0.0.2 — huit coureurs sur le plat
+## v0.0.3 — huit coureurs sur le plat, raisonnement individuel
 
-Huit coureurs qui s'affrontent, chacun pour soi, sur une route qui tourne avec un vent fixe (pas de peloton, pas de groupe). Chaque coureur
-raisonne par étages — **percevoir → interpréter → vouloir → agir** — avec 7 intentions et des raisons nommées.
+Huit coureurs qui s'affrontent, chacun pour soi, sur une route qui tourne avec un vent fixe (pas de peloton poursuivant ; des groupes se forment, c'est tout). Chaque coureur
+raisonne par étages — **percevoir → interpréter → vouloir → agir** — avec 7 intentions (s'abriter, se placer, participer, attaquer, suivre, revenir, gérer) et des raisons nommées ; il ne connaît pas les autres, il les déduit de ce qu'il voit.
 Cliquer un coureur (ou `Tab`) affiche **pourquoi** il fait ce qu'il fait.
 
 ### Lancer
@@ -33,7 +33,7 @@ npm run dist         # installeur Windows (electron-builder) — à lancer sous 
 ```
 
 Raccourcis : `Espace` pause · `1-4` vitesse ×1/×4/×16/×64 · `Tab` coureur suivant · `←` `→` coureur devant / derrière au classement · `N` nouvelle course · `B` biome · `A` aspiration (curseur) · `V` vent fixe / de face · `R` route qui tourne / droite · molette = zoom.
-Paramètres d'URL : `?seed=1234&biome=desert&vent=face&route=droite`.
+Paramètres d'URL : `?seed=1234&biome=desert&vent=face&route=droite`. **Relecture** : `?seed=9&t=1200&pause=1` ouvre la course 9 à 20 min, en pause (puis `Espace` / `1` pour la regarder, `Tab` / `←` `→` pour choisir un coureur et lire « pourquoi ? »).
 
 ### Organisation
 

@@ -6,10 +6,12 @@
    Le placement est continu sur toute la largeur de la route ; la file suit l'axe défini dans placement.ts.
    ===================================================================== */
 import type { EvenementAgir, Intention, Rider, World } from './types';
+import { PLACE_LABEL } from './types';
 import { capExplosif, FREINAGE_MAX, puissanceVers, RIDER_LEN, vitesseSolo, wattsPour } from './physics';
-import { axeY, decalage, enLigne, limiter, placeDansLaFile, roueEnLigne, yDescendant, yMontant } from './placement';
+import { abrite, axeY, decalage, enLigne, limiter, placeDansLaFile, roueEnLigne, yDescendant, yMontant } from './placement';
 import { clamp } from './util';
 import { libellePalier } from './paliers';
+import { bruitDe, gauss } from './observation';
 
 export interface Commande { p: number; yT: number }
 
@@ -34,13 +36,32 @@ function declarer(w: World, r: Rider, type: EvenementAgir, detail?: string) {
   if (r.evenements.length > 8) r.evenements.shift();
 }
 
-/** Suivre une roue : vitesse cible = celle de la roue + correction d'écart.
+/** La roue que je suis : celle que Vouloir a choisie (si elle m'abrite encore), sinon la plus proche dans la file. */
+function roueChoisie(w: World, r: Rider): Rider | null {
+  const c = r.intent.cible;
+  if (c !== null && r.intent.kind !== 'suivre') {
+    const o = w.riders[c];
+    if (o && o.status === 'course' && o.x > r.x && enLigne(w, o, 0.9) && abrite(w, o, r, 1.5, 40)) return o;
+  }
+  return roueEnLigne(w, r);
+}
+
+/** Je me cale sur une roue : si c'est une autre qu'avant, mon filtre de vitesse et ma recherche d'abri repartent de zéro. */
+function lierRoue(w: World, r: Rider, roue: Rider) {
+  const ge = r.geste;
+  if (ge.roueId === roue.id) return;
+  ge.roueId = roue.id; ge.vRoue = roue.v; ge.dyAbri = 0; ge.sensAbri = 1; ge.abriPrev = r.draft; ge.abriT = w.t; ge.latErr = 0;
+}
+
+/** Suivre une roue : vitesse cible = celle de la roue (telle que je la perçois, avec mon délai) + correction d'écart.
  *  L'effort n'est pas choisi : c'est la conséquence de la roue à tenir, dans la limite `effortMax` ; si la roue en demande plus, on le déclare. */
 function suivre(w: World, roue: Rider, r: Rider, aMax = 1.2): number {
-  const it = r.intent, ge = r.geste;
+  const it = r.intent, ge = r.geste, ex = r.exec;
+  lierRoue(w, r, roue);
+  ge.vRoue += (roue.v - ge.vRoue) * (1 - Math.exp(-w.cfg.dt / Math.max(0.05, ex.delai)));      // délai de réaction
   const gap = roue.x - r.x - RIDER_LEN;
-  // empressement : on vise une roue à ~0,5 m ; plus l'écart est grand, plus on rattrape vite (l'aspiration vaut jusqu'à ~38 % de puissance)
-  const vDes = clamp(roue.v + 1.1 * (gap - 0.5), roue.v - 3, roue.v + 4);
+  // empressement : on vise une roue à son écart de confort ; plus l'écart est grand, plus on rattrape vite (l'aspiration vaut jusqu'à ~38 % de puissance)
+  const vDes = clamp(ge.vRoue + 1.1 * (gap - ex.ecartConfort), ge.vRoue - 3, ge.vRoue + 4);
   // l'abri a de la valeur : pour reprendre la roue on accepte de dépasser un peu l'effort soutenable, jusqu'à `effortMax`
   const urgence = clamp((gap - 1.0) / 4, 0, 1);
   const base = wattsPour(r, Math.min(1, it.effortMax));
@@ -57,17 +78,29 @@ function suivre(w: World, roue: Rider, r: Rider, aMax = 1.2): number {
   return Math.min(lim, pDes);
 }
 
-/** Position latérale dans le sillage de la roue qu'on suit (dérive avec le vent), avec l'habitude personnelle. */
+/** Position latérale pour s'abriter derrière une roue. Le coureur ne connaît pas la forme du sillage : il part d'un a priori grossier
+ *  (derrière la roue, un peu côté sous le vent), ressent son abri (bruité) et fait une recherche locale : un petit pas, on garde si l'abri
+ *  augmente, on repart dans l'autre sens sinon (docs/v0.0.3-comportement.md §4.4). */
 function yAbrite(w: World, r: Rider, roue: Rider): number {
-  return limiter(roue.y + Math.max(0, roue.x - r.x - RIDER_LEN) * w.vue.tanB + r.profile.lateral * 0.2);
+  const ge = r.geste, ex = r.exec;
+  lierRoue(w, r, roue);
+  if (w.t - ge.abriT >= 1.2) {
+    const senti = r.draft + gauss(r.rng) * 0.012 * bruitDe(r);
+    if (senti < ge.abriPrev - 0.004) ge.sensAbri = ge.sensAbri === 1 ? -1 : 1;
+    ge.dyAbri = clamp(ge.dyAbri + ge.sensAbri * ex.pasAbri, -0.7, 0.7);
+    ge.abriPrev = senti; ge.abriT = w.t;
+  }
+  ge.latErr = clamp(ge.latErr * 0.97 + gauss(r.rng) * ex.precisionLat * 0.15, -0.5, 0.5);        // précision d'exécution
+  const gap = Math.max(0, roue.x - r.x - RIDER_LEN);
+  return limiter(roue.y + 0.8 * gap * w.vue.tanB + ge.dyAbri + ge.latErr + r.profile.lateral * 0.2);
 }
 
 /** Initialise le geste quand l'intention a changé (état d'exécution, propre à Agir). */
 function initGeste(w: World, r: Rider) {
   const ge = r.geste, it = r.intent;
   if (ge.nature === it.kind) return;
-  ge.nature = it.kind; ge.phaseSince = w.t; ge.surLimiteDepuis = -1; ge.enSuivi = false;
-  ge.phase = it.kind === 'relais' ? 'passe' : it.kind === 'rabattre' ? 'decale' : it.kind === 'attaquer' ? 'burst' : '';
+  ge.nature = it.kind; ge.phaseSince = w.t; ge.surLimiteDepuis = -1; ge.enSuivi = false; ge.place = null;
+  ge.phase = it.kind === 'attaquer' ? 'burst' : '';
 }
 
 export function agir(w: World, r: Rider): Commande {
@@ -78,36 +111,6 @@ export function agir(w: World, r: Rider): Commande {
   const watts = (e: number) => wattsPour(r, e);
   const pMax = watts(it.effortMax);
   switch (it.kind) {
-    case 'relais': {
-      const rivaux = autres(w, r);
-      const xMax = rivaux.reduce((m, o) => Math.max(m, o.x), -1e9);
-      // le coureur déjà en tête n'a personne à doubler ; un passeur doit avoir dépassé tous les autres de 3 m
-      if (ge.phase !== 'tete' && (rivaux.length === 0 || r.x > xMax + 2.4 || (enLigne(w, r) && r.x > xMax))) {
-        ge.phase = 'tete'; ge.phaseSince = w.t; declarer(w, r, 'passage-termine');
-        // en tête on tient l'allure à laquelle les autres roulaient (médiane de leurs vitesses), dans la limite de ses moyens,
-        // mais jamais en dessous de l'effort visé (sans plancher, chaque meneur prendrait l'allure ralentie du précédent)
-        const vs = rivaux.map((o) => o.v).sort((p, q) => p - q);
-        const vAutres = vs.length ? vs[Math.floor(vs.length / 2)]! : r.v;
-        const vVise = vitesseSolo(watts(it.effort ?? 0.83), r.profile.cda, r.profile.mass, r.hw);
-        ge.vHold = Math.max(vAutres, vVise);
-      }
-      if (ge.phase === 'tete') {
-        return { yT: limiter(g.yTete + r.profile.lateral * 0.3), p: Math.min(pMax, puissanceVers(ge.vHold, r.v, r, 1.0)) };
-      }
-      ge.phase = 'passe';
-      const vMeneur = g.meneur ? g.meneur.v : g.vitesse;
-      return { yT: yMontant(w, r), p: Math.min(pMax, puissanceVers(vMeneur + 0.9, r.v, r, 1.3)) };
-    }
-    case 'rabattre': {
-      const file = autres(w, r).filter((o) => enLigne(w, o));
-      const queueX = file.length ? file.reduce((m, o) => Math.min(m, o.x), 1e9) : -1e9;
-      if (ge.phase === 'decale' && file.length && r.x <= queueX - 3.0) { ge.phase = 'rejoint'; ge.phaseSince = w.t; declarer(w, r, 'rejoint'); }
-      if (ge.phase === 'rejoint') return { yT: placeDansLaFile(w, r), p: Math.min(pMax, puissanceVers(g.vitesse - 0.4, r.v, r)) };
-      ge.phase = 'decale';
-      // tant qu'il n'est pas sorti de la file, il garde l'allure (sinon toute la file derrière freine avec lui) ; puis il se laisse glisser
-      const libre = !enLigne(w, r, 1.1);
-      return { yT: yDescendant(w, r), p: Math.min(pMax, puissanceVers(libre ? g.vitesse - 1.0 : g.vitesse, r.v, r)) };
-    }
     case 'attaquer': {
       if (it.sprint) {
         // on sort de la file une fois pour toutes dans un couloir libre, puis on tient son couloir jusqu'à la ligne
@@ -132,7 +135,7 @@ export function agir(w: World, r: Rider): Commande {
         const vDes = clamp(a.v + 0.4 * (gap - 1.0), a.v - 3, a.v + 1.5);
         return { yT: yAbrite(w, r, a), p: Math.min(pMax, puissanceVers(vDes, r.v, r, 1.4, FREINAGE_MAX)) };
       }
-      return defaut(w, r);
+      return enGroupe(w, r, pMax, watts);
     }
     case 'gerer':
       return { yT: limiter(r.profile.lateral), p: watts(it.effort ?? 0.78) };
@@ -142,33 +145,94 @@ export function agir(w: World, r: Rider): Commande {
       return { yT: placeDansLaFile(w, r), p: Math.min(pMax, puissanceVers(vDes, r.v, r, 1.5)) };
     }
     case 'abriter':
+    case 'placer':
+    case 'participer':
     default:
-      return defaut(w, r);
+      return enGroupe(w, r, pMax, watts);
   }
 }
 
-/** Comportement de base : se placer dans le sillage de la roue devant et la suivre, sinon tenir l'allure. */
-function defaut(w: World, r: Rider): Commande {
-  const roue = roueEnLigne(w, r);
+/** Les gestes de groupe : passer en tête, reculer jusqu'à la queue, remonter près de l'avant, ou garder sa place
+ *  (suivre une roue, et mener quand personne n'est devant). La place visée vient de Vouloir ; ici on ne fait que l'exécuter. */
+function enGroupe(w: World, r: Rider, pMax: number, watts: (e: number) => number): Commande {
+  const g = w.vue, it = r.intent, ge = r.geste;
+  const groupe = g.groupes.find((gr) => gr.includes(r)) ?? [r];
+  const aut = groupe.filter((o) => o !== r);
+  const place = it.place;
+  if (ge.place !== place) { ge.place = place; ge.phase = ''; ge.phaseSince = w.t; }
+  const xMax = aut.reduce((m, o) => Math.max(m, o.x), -1e9);
+  const devantG = aut.filter((o) => o.x > r.x);
+  const vFront = devantG.length ? devantG.reduce((m, o) => (o.x > m.x ? o : m)).v : g.vitesse;
+
+  // passer devant : on remonte par le côté jusqu'à avoir dépassé tous les autres de mon groupe
+  if (place === 'tete' && aut.length) {
+    const devant = !(r.x > xMax + 2.4 || (enLigne(w, r) && r.x > xMax));
+    if (devant) {
+      ge.phase = 'monte';
+      // si je n'arrive pas à doubler (le meneur est plus fort que moi), je le déclare au bout de 20 s : Vouloir réévaluera
+      if (w.t - ge.phaseSince > 20 && w.t - ge.limiteT > 10) { ge.limiteT = w.t; declarer(w, r, 'limite-atteinte', 'depassement'); }
+      // je passe pour mener : je vise au moins la vitesse que je veux tenir à mon effort (sinon, quand tout le groupe est à l'arrêt, je viserais 0,9 m/s)
+      const vVoulue = it.effort !== null ? vitesseSolo(watts(it.effort), r.profile.cda, r.profile.mass, r.hw) : 0;
+      return { yT: yMontant(w, r), p: Math.min(pMax, puissanceVers(Math.max(vFront + 0.9, vVoulue), r.v, r, 1.3)) };
+    }
+    if (ge.phase === 'monte') { ge.phase = 'garde'; declarer(w, r, 'passage-termine'); }
+  }
+
+  // reculer : on s'écarte (en gardant l'allure tant qu'on est dans la file, sinon la file derrière freinerait avec nous), on se laisse glisser, puis on rejoint la queue
+  if (place === 'queue' && aut.length) {
+    const file = aut.filter((o) => enLigne(w, o));
+    const queueX = (file.length ? file : aut).reduce((m, o) => Math.min(m, o.x), 1e9);
+    if (ge.phase === '') ge.phase = 'decale';
+    // le geste se termine quand je suis derrière la queue ; s'il n'aboutit pas (tout le monde ralentit avec moi), je le déclare fini au bout de 25 s
+    if (ge.phase === 'decale' && (r.x <= queueX - 3.0 || w.t - ge.phaseSince > 25)) { ge.phase = 'rejoint'; ge.phaseSince = w.t; declarer(w, r, 'place-atteinte'); }
+    if (ge.phase === 'decale') {
+      const libre = !enLigne(w, r, 1.1);
+      // lever le pied, c'est rouler en roue libre (puissance ≥ 0) : freiner activement ferait freiner toute la file derrière
+      return { yT: yDescendant(w, r), p: Math.max(0, Math.min(pMax, puissanceVers(libre ? g.vitesse - 1.0 : g.vitesse, r.v, r))) };
+    }
+    // rejoint : on se replace derrière la queue (retombe sur « garder » ci-dessous)
+  }
+
+  // remonter près de l'avant, sans passer en tête
+  if (place === 'avant' && aut.length) {
+    if (devantG.length > 1 && ge.phase !== 'garde') { ge.phase = 'monte'; return { yT: yMontant(w, r), p: Math.min(pMax, puissanceVers(vFront + 0.6, r.v, r, 1.3)) }; }
+    if (ge.phase === 'monte') { ge.phase = 'garde'; declarer(w, r, 'place-atteinte'); }
+  }
+
+  // garder sa place : suivre la roue ; sans roue (en tête de mon groupe, ou seul), mener si je participe, sinon tenir l'allure
+  const roue = roueChoisie(w, r);
   if (roue) return { yT: yAbrite(w, r, roue), p: suivre(w, roue, r) };
-  return { yT: placeDansLaFile(w, r), p: Math.min(wattsPour(r, 1), puissanceVers(Math.max(w.vue.vitesse, r.v - 0.3), r.v, r)) };
+  if (it.kind === 'participer' && it.effort !== null) {
+    ge.roueId = null;
+    return { yT: limiter(g.yTete + r.profile.lateral * 0.3), p: Math.min(pMax, watts(it.effort)) };
+  }
+  ge.roueId = null;
+  return { yT: placeDansLaFile(w, r), p: Math.min(wattsPour(r, 1), puissanceVers(Math.max(g.vitesse, r.v - 0.3), r.v, r)) };
 }
 
 /** Phrase d'« Agir » pour la trace (§6.5 : « je me place derrière le rouleur, effort minimal »). */
 export function decrireAction(w: World, r: Rider, k: Intention): string {
   const kmh = Math.round(r.v * 3.6);
   const cote = Math.abs(w.vue.tanB) > 0.12 ? ' (dans le sillage, à l’abri du vent de côté)' : '';
+  const place = r.intent.place;
   switch (k) {
     case 'abriter': {
-      const roue = roueEnLigne(w, r);
+      if (place === 'queue') return `je suis devant : je m'écarte et je me laisse glisser jusqu'à la queue pour m'abriter`;
+      const roue = roueChoisie(w, r);
       return roue ? `je me place derrière ${roue.letter}${cote}, effort minimal` : 'je reste dans la file, effort minimal';
     }
-    case 'relais':
-      return r.geste.phase === 'tete' ? `je roule en tête à ${kmh} km/h pour tenir l'allure` : `je passe devant les autres côté ${w.vue.coteMontant < 0 ? 'gauche' : 'droit'} pour prendre le relais`;
-    case 'rabattre': return `je me décale ${w.vue.coteMontant < 0 ? 'à droite' : 'à gauche'}, je laisse passer et je me replace à l’abri dans la file`;
+    case 'placer': return 'je remonte par le côté pour être près de l’avant, sans passer en tête';
+    case 'participer': {
+      if (place === 'queue') return "j'ai fait mon tour : je m'écarte et je me laisse glisser jusqu'à la queue";
+      if (place === 'tete') return `je passe devant les autres côté ${w.vue.coteMontant < 0 ? 'gauche' : 'droit'} pour mener`;
+      const roue = roueChoisie(w, r);
+      return roue ? `j'attends mon tour derrière ${roue.letter}` : `je mène à ${kmh} km/h (${libellePalier(r.intent.effort ?? 0.85)})`;
+    }
     case 'attaquer': return r.intent.sprint ? 'je lance le sprint à fond' : "j'accélère fort pour faire un écart";
     case 'suivre': { const a = r.intent.cible !== null ? w.riders[r.intent.cible] : null; return a ? `je saute dans la roue de ${a.letter}` : 'je suis le coureur qui attaque'; }
     case 'gerer': return `je roule à mon rythme (${libellePalier(r.intent.effort ?? 0.78)}, ≈ ${Math.round(wattsPour(r, r.intent.effort ?? 0.78))} W)`;
     case 'revenir': { const dev = devantAuClassement(w, r); return dev ? `je reviens sur ${dev.letter}, effort soutenu` : 'je reviens, effort soutenu'; }
   }
 }
+
+export { PLACE_LABEL };

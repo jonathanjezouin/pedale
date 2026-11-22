@@ -1,8 +1,8 @@
 /* Validation statistique du POC (§6.6) : lance N courses sans affichage et vérifie les critères.
    Huit coureurs, aucun peloton : chacun joue sa course. */
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { ARCHETYPE_LABEL, ANCRAGES, NIVEAUX, creerMonde, lecture, simuler } from '@pedale/sim';
-import type { Archetype, Attribut } from '@pedale/sim';
+import { ARCHETYPE_LABEL, ANCRAGES, INTENTION_LABEL, INTENTIONS, NIVEAUX, creerMonde, lecture, simuler } from '@pedale/sim';
+import type { Archetype, Attribut, Intention } from '@pedale/sim';
 
 const arg = (name: string, def: string) => { const i = process.argv.indexOf('--' + name); return i >= 0 ? process.argv[i + 1]! : def; };
 const N = Number(arg('n', '300')), SEED0 = Number(arg('seed0', '1'));
@@ -18,6 +18,7 @@ interface Course {
   attaques: number; maxAttaquesParCoureur: number; decroches: number; cuits: number;
   partTete: Record<Archetype, number>; attaquesParArch: Record<Archetype, number>;
   decisions: number; decisionsScoreNegatif: number; relaisSansRaison: number; vitesseMoy: number;
+  neutralisee: boolean; tempsIntention: Record<Intention, number>; vitesseMin: number;
 }
 
 const courses: Course[] = [];
@@ -35,7 +36,7 @@ for (let i = 0; i < N; i++) {
   for (const d of w.trace) {
     const ev = d.evaluations.find((e) => e.intention === d.intention)!;
     if (ev.score < 0) neg++;
-    if (d.intention === 'relais' && ev.score < 1) sansRaison++;
+    if (d.intention === 'participer' && ev.score < 1) sansRaison++;
   }
   const o = w.result.ordre, win = w.riders[o[0]!]!;
   courses.push({
@@ -48,6 +49,9 @@ for (let i = 0; i < N; i++) {
     partTete: Object.fromEntries(ARCHS.map((a) => [a, totalLead ? partTete[a] / totalLead : 0])) as Record<Archetype, number>,
     attaquesParArch, decisions: w.trace.length, decisionsScoreNegatif: neg, relaisSansRaison: sansRaison,
     vitesseMoy: w.cfg.distance / w.result.tFin * 3.6,
+    neutralisee: w.result.neutralisee,
+    tempsIntention: Object.fromEntries(INTENTIONS.map((k) => [k, w.riders.reduce((s, r) => s + r.stats.tempsParIntention[k], 0)])) as Record<Intention, number>,
+    vitesseMin: Math.min(...w.riders.map((r) => (r.status === 'arrive' && r.finishTime ? w.cfg.distance / r.finishTime * 3.6 : 0))),
   });
 }
 
@@ -58,6 +62,8 @@ console.log('## 3. Déroulement de la course (huit coureurs, pas de peloton)');
 console.log(`Durée moyenne ${(moy(courses.map((c) => c.duree)) / 60).toFixed(0)} min, vitesse moyenne ${moy(courses.map((c) => c.vitesseMoy)).toFixed(1)} km/h`);
 console.log(`Écart 1er–2e : médiane ${mediane(courses.map((c) => c.ecart12)).toFixed(1)} s ; victoire détachée (> 4 s) : ${pct(courses.filter((c) => c.ecart12 > 4).length, N)} ; arrivée au sprint (< 2 s) : ${pct(courses.filter((c) => c.ecart12 < 2).length, N)}`);
 console.log(`Vitesse moyenne selon la distance : < 19 km ${moy(courses.filter((c) => c.distance < 19000).map((c) => c.vitesseMoy)).toFixed(1)} km/h ; ≥ 19 km ${moy(courses.filter((c) => c.distance >= 19000).map((c) => c.vitesseMoy)).toFixed(1)} km/h`);
+
+console.log(`Courses neutralisées (garde-fou : plus personne n'avance) : ${pct(courses.filter((c) => c.neutralisee).length, N)} ; courses lentes (< 30 km/h de moyenne) : ${pct(courses.filter((c) => c.vitesseMoy < 30).length, N)}`);
 
 console.log('\n## 1. Rotations de relais (sans avoir été écrites)');
 console.log(`Changements de tête / course : ${moy(courses.map((c) => c.changements)).toFixed(0)} en moyenne`);
@@ -79,7 +85,11 @@ console.log(`Quelqu'un roule seul > 4 min en continu : ${pct(courses.filter((c) 
 console.log(`Orage d'attaques (> 8 attaques ou > 4 par le même coureur) : ${pct(courses.filter((c) => c.attaques > 8 || c.maxAttaquesParCoureur > 4).length, N)}`);
 console.log(`Attaques par course : ${moy(courses.map((c) => c.attaques)).toFixed(1)} ; décrochages : ${moy(courses.map((c) => c.decroches)).toFixed(1)} ; coureurs cuits : ${moy(courses.map((c) => c.cuits)).toFixed(1)}`);
 const dec = courses.reduce((s, c) => s + c.decisions, 0), neg = courses.reduce((s, c) => s + c.decisionsScoreNegatif, 0), sr = courses.reduce((s, c) => s + c.relaisSansRaison, 0);
-console.log(`Changements d'intention : ${dec} ; avec un score négatif (choix « par défaut ») : ${pct(neg, dec)} ; « Prendre un relais » à score < 1 : ${sr}`);
+console.log(`Changements d'intention : ${dec} ; avec un score négatif (choix « par défaut ») : ${pct(neg, dec)} ; « Participer » à score < 1 : ${sr}`);
+{
+  const tot = courses.reduce((s, c) => s + INTENTIONS.reduce((a, k) => a + c.tempsIntention[k], 0), 0);
+  console.log('Part du temps par intention : ' + INTENTIONS.map((k) => `${INTENTION_LABEL[k]} ${pct(courses.reduce((s, c) => s + c.tempsIntention[k], 0), tot)}`).join(' ; '));
+}
 
 console.log('\n## 6. Calibration WorldTour des coureurs générés (docs/v0.0.3-attributs.md)');
 {

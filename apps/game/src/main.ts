@@ -269,3 +269,9 @@ newWorld(seed); setSpeed(1);
   advance: (sec: number) => { for (let i = 0; i < sec / SIM_DT && !over(); i++) { prev = W.riders.map((r) => ({ x: r.x, y: r.y })); pas(W); } handleEvents(); acc = 0; },
   setZoom: (z: number) => { cam.user = z; }, setAuto: (a: boolean) => { auto = a; },
 };
+// atelier de relecture : ?seed=9&t=1200&pause=1 ouvre la course 9 à 20 min, en pause (puis Espace / 1 pour la regarder au ralenti, Tab / ← → pour choisir un coureur et lire « pourquoi ? »)
+{
+  const t0 = Number(qs.get('t') ?? 0);
+  if (t0 > 0) (window as unknown as { __pedale: { advance: (s: number) => void } }).__pedale.advance(t0);
+  if (qs.get('pause') === '1') setSpeed(0);
+}

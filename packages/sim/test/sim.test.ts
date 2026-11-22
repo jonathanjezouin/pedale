@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { creerMonde, pas, simuler, expliquer, aspiration, aspirationValeur, ASPIRATION, puissanceVers, wattsPour, capSoutenu, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF, niveauDe, durabilitePct, ftpWkg, lecture, palierDe, PALIERS, pointeNorm } from '../src/index';
+import { creerMonde, pas, simuler, dureeMax, dangerSuppose, dispositionDe, PLACE_LABEL, INTENTION_LABEL, expliquer, aspiration, aspirationValeur, ASPIRATION, puissanceVers, wattsPour, capSoutenu, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF, niveauDe, durabilitePct, ftpWkg, lecture, palierDe, PALIERS, pointeNorm } from '../src/index';
+import { executionDe } from '../src/scenario';
 
 describe('simulation v0.0.1', () => {
   it('est déterministe : même seed, même course', () => {
@@ -23,18 +24,19 @@ describe('simulation v0.0.1', () => {
     expect(abrite).toBeLessThan(expose * 0.8);
   });
 
-  it('les veto sont respectés : un coureur sans réserve ne peut ni relayer, ni attaquer, ni suivre', () => {
+  it('les veto sont respectés : un coureur sans réserve ne peut ni participer, ni se placer, ni attaquer, ni suivre', () => {
     const w = creerMonde({ seed: 7 });
     for (let i = 0; i < 40; i++) pas(w);
     const r = w.riders[0]!;
-    r.E = E_CUIT - 0.05;
+    r.E = Math.min(r.E, E_CUIT) - 0.1;       // très en dessous du seuil : la perception est approximative (bruit), le veto porte sur ce qu'il ressent
+    r.E = Math.max(0, r.E);
     for (let i = 0; i < 8; i++) pas(w);
     const d = r.last!;
-    for (const k of ['relais', 'attaquer', 'suivre'] as const) {
+    for (const k of ['participer', 'placer', 'attaquer', 'suivre'] as const) {
       const ev = d.evaluations.find((e) => e.intention === k)!;
       expect(ev.vetos.length).toBeGreaterThan(0);
     }
-    expect(['relais', 'attaquer', 'suivre']).not.toContain(r.intent.kind);
+    expect(['participer', 'placer', 'attaquer', 'suivre']).not.toContain(r.intent.kind);
   });
 
   it('chaque décision est explicable : raisons nommées, perçu/réel, action', () => {
@@ -221,20 +223,20 @@ describe('v0.0.3a : FTP, paliers, contrat Vouloir → Agir', () => {
     for (let i = 0; i < 4; i++) pas(w);
     let changementsHorsDecision = 0;
     while (w.result.statut !== 'termine' && w.t < 900) {
-      const avant = w.riders.map((r) => `${r.intent.kind}|${r.intent.effort}|${r.intent.effortMax}|${r.intent.sprint}|${r.intent.cible}`);
+      const avant = w.riders.map((r) => `${r.intent.kind}|${r.intent.effort}|${r.intent.effortMax}|${r.intent.sprint}|${r.intent.cible}|${r.intent.place}`);
       const decisions = w.riders.map((r) => r.last?.t);
       // une décision a lieu au début du pas ; on ne peut comparer qu'à travers elle : si `last` n'a pas bougé, l'intention n'a pas bougé
       pas(w);
       w.riders.forEach((r, i) => {
-        const apres = `${r.intent.kind}|${r.intent.effort}|${r.intent.effortMax}|${r.intent.sprint}|${r.intent.cible}`;
+        const apres = `${r.intent.kind}|${r.intent.effort}|${r.intent.effortMax}|${r.intent.sprint}|${r.intent.cible}|${r.intent.place}`;
         if (apres !== avant[i] && r.last?.t === decisions[i]) changementsHorsDecision++;
       });
     }
     expect(changementsHorsDecision).toBe(0);
   });
-  it('Agir déclare des événements, ils couvrent limite-atteinte, fin-burst, rejoint, passage-termine', () => {
+  it('Agir déclare des événements, ils couvrent limite-atteinte, fin-burst, place-atteinte, passage-termine', () => {
     const vus = new Set<string>();
-    for (const seed of [1, 2, 3, 4, 5, 6]) {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
       const w = creerMonde({ seed });
       while (w.result.statut !== 'termine' && w.t < 1800) {
         pas(w);
@@ -243,7 +245,7 @@ describe('v0.0.3a : FTP, paliers, contrat Vouloir → Agir', () => {
     }
     expect(vus.has('limite-atteinte')).toBe(true);
     expect(vus.has('fin-burst')).toBe(true);
-    expect(vus.has('rejoint')).toBe(true);
+    expect(vus.has('place-atteinte')).toBe(true);
     expect(vus.has('passage-termine')).toBe(true);
   });
 });
@@ -275,4 +277,196 @@ describe('v0.0.3a : pointe normalisée par une constante nommée', () => {
     expect(pointeNorm(5000)).toBe(1);
     expect(pointeNorm(1425)).toBeCloseTo(0.5, 6);
   });
+});
+
+describe('v0.0.3b : les 7 intentions finales', () => {
+  it('s\'abriter, se placer, participer, attaquer, suivre, revenir, gérer ; plus de relais ni de se rabattre', () => {
+    expect([...INTENTIONS]).toEqual(['abriter', 'placer', 'participer', 'attaquer', 'suivre', 'revenir', 'gerer']);
+    expect(Object.keys(INTENTION_LABEL).sort()).toEqual([...INTENTIONS].sort());
+    expect(Object.keys(PLACE_LABEL).sort()).toEqual(['avant', 'garder', 'queue', 'tete']);
+  });
+  it('la place visée est cohérente avec l\'intention (queue : s\'abriter ou participer ; avant : se placer ; tête : participer)', () => {
+    for (const seed of [1, 2, 3]) {
+      const w = creerMonde({ seed });
+      for (let i = 0; i < 4 * 900 && w.result.statut !== 'termine'; i++) {
+        pas(w);
+        for (const r of w.riders) {
+          const { kind, place } = r.intent;
+          if (place === 'queue') expect(['abriter', 'participer']).toContain(kind);
+          if (place === 'avant') expect(kind).toBe('placer');
+          if (place === 'tete') expect(kind).toBe('participer');
+        }
+      }
+    }
+  });
+  it('toutes les intentions finales apparaissent sur quelques courses (dont « se placer »)', () => {
+    const vues = new Set<string>();
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) for (const r of simuler(creerMonde({ seed })).riders) for (const k of INTENTIONS) if (r.stats.tempsParIntention[k] > 0) vues.add(k);
+    expect([...vues].sort()).toEqual([...INTENTIONS].sort());
+  });
+});
+
+describe('v0.0.3b : perception limitée, déduction par le comportement seul', () => {
+  const sim = (seed: number, secondes: number) => { const w = creerMonde({ seed }); while (w.t < secondes && w.result.statut !== 'termine') pas(w); return w; };
+
+  it('un coureur ne voit des autres ni leur profil, ni leur réserve, ni leur archétype', () => {
+    const w = sim(3, 300);
+    const permis = ['id', 'letter', 'dx', 'dy', 'vRel', 'posture', 'enLigne', 'accel'];
+    for (const r of w.riders) {
+      expect(r.vus.length).toBeGreaterThan(0);
+      for (const q of r.vus) expect(Object.keys(q).sort()).toEqual([...permis].sort());
+      const d = r.last!;
+      const txt = JSON.stringify([d.percu.rivaux, d.interprete.autres]);
+      for (const interdit of ['archetype', 'pointe', 'leadRecent', 'pPeak', 'wPrime', 'ftp', 'reserve', 'generosite']) expect(txt).not.toContain(interdit);
+    }
+  });
+  it('ce que le coureur ressent de sa propre fatigue est approximatif : proche du réel, jamais exact', () => {
+    const w = sim(4, 600);
+    let ecartMax = 0, exacts = 0, n = 0;
+    for (const r of w.riders) for (const d of w.trace.filter((t) => t.riderId === r.id)) {
+      const e = Math.abs(d.percu.moi.reserve - d.reel.reserve);
+      ecartMax = Math.max(ecartMax, e); n++; if (e < 1e-9) exacts++;
+    }
+    expect(n).toBeGreaterThan(20);
+    expect(ecartMax).toBeLessThan(0.25);
+    expect(exacts / n).toBeLessThan(0.1);
+  });
+  it('un coureur vu à l\'avant longtemps passe pour un rouleur, un suiveur pour un suiveur, un inconnu reste inconnu', () => {
+    const base = { vu: 0, tete: 0, v: 10, accel: 0, accelMax: 0, derniereVue: 0 };
+    expect(dispositionDe({ ...base, vu: 120, tete: 70 })).toBe('rouleur');
+    expect(dispositionDe({ ...base, vu: 300, tete: 3 })).toBe('suiveur');
+    expect(dispositionDe({ ...base, vu: 30, tete: 3 })).toBe('inconnu');
+    expect(dispositionDe(undefined)).toBe('inconnu');
+  });
+  it('le danger supposé vient des accélérations observées, pas de la pointe', () => {
+    const base = { vu: 100, tete: 0, v: 10, accel: 0, accelMax: 0, derniereVue: 0 };
+    expect(dangerSuppose({ ...base, accelMax: 0.2 })).toBe(0);
+    expect(dangerSuppose({ ...base, accelMax: 0.8 })).toBeGreaterThan(0.3);
+    expect(dangerSuppose({ ...base, accelMax: 2 })).toBe(1);
+    expect(dangerSuppose(undefined)).toBe(0);
+  });
+  it('au fil de la course, les coureurs se font une idée des autres (souvenirs, dispositions déduites)', () => {
+    const w = sim(2, 900);
+    let souvenirs = 0, dispo = 0;
+    for (const r of w.riders) {
+      const d = r.last!;
+      souvenirs += Object.keys(r.memoire).length;
+      dispo += d.interprete.autres.filter((a) => a.disposition !== 'inconnu').length;
+    }
+    expect(souvenirs).toBeGreaterThan(20);
+    expect(dispo).toBeGreaterThan(0);
+  });
+  it('la perception du groupe : taille, allure et tendance existent', () => {
+    const w = sim(5, 240);
+    for (const r of w.riders) {
+      const p = r.last!.percu;
+      expect(p.moi.groupeTaille).toBeGreaterThanOrEqual(1);
+      expect(p.rivaux.allure).toBeGreaterThan(0);
+      expect(Number.isFinite(p.rivaux.tendanceAllure)).toBe(true);
+    }
+  });
+});
+
+describe('v0.0.3b : compétence d\'exécution et abri ressenti', () => {
+  it('un coureur expérimenté tient une roue plus près, plus précisément, et réagit plus vite', () => {
+    const a = executionDe(0.9), b = executionDe(0.3);
+    expect(a.ecartConfort).toBeLessThan(b.ecartConfort);
+    expect(a.precisionLat).toBeLessThan(b.precisionLat);
+    expect(a.delai).toBeLessThan(b.delai);
+    expect(a.pasAbri).toBeLessThan(b.pasAbri);
+  });
+  it('la recherche locale de l\'abri travaille (décalage non nul, borné) sans connaître le sillage', () => {
+    const w = creerMonde({ seed: 6 });
+    let max = 0, bouge = 0;
+    for (let i = 0; i < 4 * 400; i++) {
+      pas(w);
+      for (const r of w.riders) { max = Math.max(max, Math.abs(r.geste.dyAbri)); if (r.geste.dyAbri !== 0) bouge++; }
+    }
+    expect(bouge).toBeGreaterThan(100);
+    expect(max).toBeLessThanOrEqual(0.7 + 1e-9);
+  });
+  it('les coureurs s\'abritent vraiment : abri moyen élevé derrière une roue', () => {
+    const w = creerMonde({ seed: 6 });
+    const abris: number[] = [];
+    for (let i = 0; i < 4 * 600; i++) { pas(w); if (i % 20 === 0 && i > 400) for (const r of w.riders) if (r.intent.kind === 'abriter' && r.intent.place === 'garder') abris.push(r.draft); }
+    const moy = abris.reduce((x, y) => x + y, 0) / abris.length;
+    expect(moy).toBeGreaterThan(0.2);
+  });
+});
+
+describe('v0.0.3b : le relais se transmet par l\'arrière', () => {
+  it('quitter la tête, passer devant, rejoindre : les événements existent et la tête change de mains', () => {
+    const vus = new Set<string>(); let changements = 0;
+    for (const seed of [1, 2, 3]) {
+      const w = creerMonde({ seed });
+      while (w.result.statut !== 'termine' && w.t < 1500) { pas(w); for (const r of w.riders) for (const e of r.evenements) vus.add(e.type); }
+      changements += w.changementsDeTete;
+    }
+    expect(vus.has('passage-termine')).toBe(true);
+    expect(vus.has('place-atteinte')).toBe(true);
+    expect(changements).toBeGreaterThan(40);
+  });
+  it('« être en tête » n\'est pas une intention : en tête on peut participer (mener) comme s\'abriter (reculer)', () => {
+    const intentionsEnTete = new Set<string>();
+    for (const seed of [1, 2, 3, 4]) {
+      const w = creerMonde({ seed });
+      while (w.result.statut !== 'termine' && w.t < 1200) { pas(w); const m = w.vue.meneur; if (m && w.t > 60) intentionsEnTete.add(m.intent.kind ?? '-'); }
+    }
+    expect(intentionsEnTete.has('participer')).toBe(true);
+    expect(intentionsEnTete.has('abriter')).toBe(true);
+  });
+  it('les dépassements simultanés sont rares (un seul coureur hérite de la tête en pratique)', () => {
+    let avecPasseur = 0, plusieurs = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const w = creerMonde({ seed });
+      while (w.result.statut !== 'termine' && w.t < 1500) {
+        pas(w);
+        const n = w.riders.filter((r) => r.status === 'course' && r.intent.kind === 'participer' && r.intent.place === 'tete' && r.geste.phase === 'monte').length;
+        if (n >= 1) avecPasseur++; if (n >= 2) plusieurs++;
+      }
+    }
+    expect(avecPasseur).toBeGreaterThan(100);
+    expect(plusieurs / avecPasseur).toBeLessThan(0.25);
+  });
+});
+
+describe('v0.0.3b : tests de retrait des causes (docs/v0.0.3-chaine.md §4)', () => {
+  const mesure = (prep: (w: ReturnType<typeof creerMonde>) => void, seeds: number[]) => {
+    let groupes = 0, etendue = 0, ech = 0, cv = 0;
+    for (const seed of seeds) {
+      const w = creerMonde({ seed }); prep(w);
+      while (w.result.statut !== 'termine' && w.t < 1500) {
+        pas(w);
+        if (w.t > 120 && Math.abs(w.t % 10) < 0.13) { groupes += w.vue.groupes.length; ech++; const xs = w.vue.ordre.map((r) => r.x); etendue += Math.max(...xs) - Math.min(...xs); }
+      }
+      const lt = w.riders.map((r) => r.stats.leadTime), m = lt.reduce((a, b) => a + b, 0) / lt.length;
+      cv += Math.sqrt(lt.reduce((a, b) => a + (b - m) ** 2, 0) / lt.length) / Math.max(m, 1);
+    }
+    return { groupes: groupes / ech, etendue: etendue / ech, cv: cv / seeds.length };
+  };
+  const seeds = [1, 2, 3, 4, 5, 6];
+  it('aspiration à zéro : le groupe se disperse', () => {
+    const normal = mesure(() => {}, seeds);
+    const base = ASPIRATION.base;
+    ASPIRATION.base = 0;
+    try {
+      const sans = mesure(() => {}, seeds);
+      expect(sans.etendue).toBeGreaterThan(normal.etendue * 1.15);
+      expect(sans.groupes).toBeGreaterThan(normal.groupes);
+    } finally { ASPIRATION.base = base; }
+  }, 120000);
+  it('huit profils identiques : pas de rouleur désigné, le temps en tête se répartit plus également', () => {
+    const normal = mesure(() => {}, seeds);
+    const identiques = mesure((w) => { const p0 = w.riders[0]!.profile; for (const r of w.riders) { r.profile = { ...p0 }; r.exec = w.riders[0]!.exec; } }, seeds);
+    expect(identiques.cv).toBeLessThan(normal.cv * 0.85);
+  }, 120000);
+});
+
+describe('v0.0.3b : garde-fou technique', () => {
+  it('aucune course n\'est neutralisée sur 20 seeds (le garde-fou existe mais ne doit pas servir)', () => {
+    let neutralisees = 0;
+    for (let seed = 1; seed <= 20; seed++) { const w = simuler(creerMonde({ seed })); if (w.result.neutralisee) neutralisees++; expect(w.result.statut).toBe('termine'); }
+    expect(neutralisees).toBe(0);
+    expect(dureeMax(20000)).toBeGreaterThan(20000 / 8);
+  }, 120000);
 });

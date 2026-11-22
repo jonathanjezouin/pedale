@@ -14,18 +14,22 @@ export const ARCHETYPE_LABEL: Record<Archetype, string> = {
   opportuniste: 'opportuniste',
 };
 
-/** Les 7 intentions du POC (§6.2). */
-export type Intention = 'relais' | 'abriter' | 'rabattre' | 'attaquer' | 'suivre' | 'gerer' | 'revenir';
-export const INTENTIONS: Intention[] = ['abriter', 'relais', 'rabattre', 'attaquer', 'suivre', 'gerer', 'revenir'];
+/** Les 7 intentions finales (docs/v0.0.3-comportement.md §4.6). */
+export type Intention = 'abriter' | 'placer' | 'participer' | 'attaquer' | 'suivre' | 'revenir' | 'gerer';
+export const INTENTIONS: Intention[] = ['abriter', 'placer', 'participer', 'attaquer', 'suivre', 'revenir', 'gerer'];
 export const INTENTION_LABEL: Record<Intention, string> = {
-  relais: 'Prendre un relais',
   abriter: "S'abriter",
-  rabattre: 'Se rabattre',
+  placer: 'Se placer',
+  participer: 'Participer',
   attaquer: 'Attaquer',
   suivre: "Suivre l'attaque",
-  gerer: 'Gérer à son rythme',
   revenir: 'Revenir',
+  gerer: 'Gérer à son rythme',
 };
+/** Place visée dans le groupe (décision de Vouloir ; le déplacement est l'affaire d'Agir) :
+ *  garder (où je suis ; en tête : mener), tete (passer devant), avant (remonter près de l'avant sans passer en tête), queue (reculer jusqu'à la queue). */
+export type Place = 'garder' | 'tete' | 'avant' | 'queue';
+export const PLACE_LABEL: Record<Place, string> = { garder: 'où je suis', tete: 'en tête', avant: "près de l'avant", queue: 'à la queue' };
 
 /** Profil individuel : l'individualité vient des paramètres, pas de logiques différentes (§4.2). */
 export interface Profile {
@@ -59,18 +63,19 @@ export interface IntentState {
   /** Limites acceptées pour cette action, recalculées à chaque évaluation. */
   effortMax: number;           // part du FTP au plus (au-dessus de 1 on puise dans l'explosivité)
   fatigueMax: number;          // fatigue (1 − E) au-delà de laquelle je n'accepte plus de tenir ça
-  termine: boolean;            // Vouloir a reçu « rejoint » : se rabattre est fini
+  place: Place;                // place visée dans mon groupe
+  placeAtteinte: boolean;      // Vouloir a reçu « place-atteinte » / « passage-termine » pour cette place
   forceEval: string | null;    // déclencheur de réévaluation (événements du monde : décroché, attaque, sprint…)
 }
 
 /** Événements déclarés par « Agir » vers « Vouloir » (§4.2). Agir ne modifie jamais l'intention. */
-export type EvenementAgir = 'rejoint' | 'fin-burst' | 'roue-perdue' | 'limite-atteinte' | 'passage-termine';
+export type EvenementAgir = 'place-atteinte' | 'fin-burst' | 'roue-perdue' | 'limite-atteinte' | 'passage-termine';
 export interface EvenementDeclare { type: EvenementAgir; t: number; detail?: string }
 
 /** État d'exécution propre à « Agir » (le « geste ») : invisible de « Vouloir ». */
 export interface Geste {
   nature: Intention | null;    // intention pour laquelle ce geste a été initialisé
-  phase: string;               // passe, tete, decale, rejoint, burst, sustain, couloir…
+  phase: string;               // monte, decale, rejoint, garde, burst, sustain, couloir…
   phaseSince: number;
   vHold: number;               // vitesse tenue en tête
   side: -1 | 1;                // couloir latéral utilisé pour passer/attaquer
@@ -78,6 +83,32 @@ export interface Geste {
   surLimiteDepuis: number;     // instant depuis lequel ce que demande la roue dépasse mon effort max (−1 : non)
   roueT: number;               // dernier « roue-perdue » déclaré
   enSuivi: boolean;            // roue à moins de 6 m au pas précédent
+  place: Place | null;         // place visée pour laquelle la phase courante a été engagée
+  roueId: number | null;       // roue actuellement suivie (pour réinitialiser filtre et recherche d'abri)
+  vRoue: number;               // vitesse de la roue telle que je la perçois (filtrée par mon délai de réaction)
+  dyAbri: number;              // décalage latéral trouvé par la recherche locale de l'abri (m)
+  sensAbri: 1 | -1;            // sens de la recherche locale
+  abriPrev: number;            // abri ressenti à la précédente comparaison
+  abriT: number;               // instant de la dernière comparaison
+  latErr: number;              // petite erreur de trajectoire latérale (précision d'exécution)
+}
+
+/** Compétence d'exécution (docs/v0.0.3-comportement.md §4.3), dérivée de l'expérience : un bon coureur est près et centré, réagit vite. */
+export interface Execution {
+  ecartConfort: number;        // m : écart visé derrière la roue
+  precisionLat: number;        // m : amplitude de l'erreur de trajectoire
+  delai: number;               // s : délai de réaction à la vitesse de la roue
+  pasAbri: number;             // m : pas de la recherche locale de l'abri
+}
+
+/** Ce que je me rappelle d'un autre coureur, à force de le voir (aucune donnée exacte sur son profil). */
+export interface Souvenir {
+  vu: number;                  // secondes où je l'ai eu en vue
+  tete: number;                // secondes où je l'ai vu en tête (décroissance exponentielle, τ = 300 s)
+  v: number;                   // sa dernière vitesse observée (m/s)
+  accel: number;               // son accélération observée (lissée)
+  accelMax: number;            // la plus forte accélération que je lui ai vue (décroît lentement)
+  derniereVue: number;         // instant de la dernière observation
 }
 
 export interface RiderStats {
@@ -104,8 +135,16 @@ export interface Rider {
   // état de course
   intent: IntentState;
   geste: Geste;
-  evenements: EvenementDeclare[];   // déclarés par Agir depuis la dernière décision
+  exec: Execution;
+  rng: () => number;                // bruit de perception propre au coureur (déterministe)
+  biais: { reserve: number; explosivite: number };   // biais durable de la fatigue ressentie
+  memoire: Record<number, Souvenir>;
+  vus: VuAutre[];                   // ce que je vois des autres à la dernière observation (bruité)
+  attaqueVue: { id: number; t: number; vu: number } | null;   // attaque que je crois voir
+  allure: { v: number; hist: number[]; tendance: number };    // allure du groupe telle que je la perçois
+  enTetePrev: boolean;
   stats: RiderStats;
+  evenements: EvenementDeclare[];   // déclarés par Agir depuis la dernière décision
   decroche: boolean;       // à plus de ~40 m du coureur juste devant (avec hystérésis)
   ecartDevant: number;     // m jusqu'au coureur juste devant (1e9 si je suis premier)
   status: 'course' | 'arrive';
@@ -123,43 +162,55 @@ export interface Rider {
 
 /* ------------------------- Perception / interprétation ------------------------- */
 
-export interface AutreCoureur {
-  id: number; letter: string; archetype: Archetype;
-  leadRecent: number; tempsEnTete: number; pointe: number; x: number; v: number;
+/** Un autre coureur tel que je le vois : positions et vitesses bruitées, posture visible. Jamais son profil ni sa réserve. */
+export interface VuAutre {
+  id: number; letter: string;
+  dx: number;            // m, > 0 : devant moi
+  dy: number;            // décalage latéral relatif (m)
+  vRel: number;          // vitesse relative (m/s, > 0 : il va plus vite que moi)
+  posture: 0 | 1 | 2 | 3;
+  enLigne: boolean;      // dans la file (et non en train de passer ou de se laisser glisser)
+  accel: number;         // son accélération, déduite de mes observations successives
 }
 
 export interface Percu {
   moi: {
-    reserve: number; explosivite: number; vitesse: number;
-    abrite: number;            // réduction de traînée (0 = exposé)
+    reserve: number; explosivite: number; vitesse: number;   // ressenties : approximatives (bruit + biais)
+    abrite: number;            // abri ressenti (0 = exposé), bruité
     rang: number;              // position de course : 0 = premier
     estEnTete: boolean;        // personne ne m'abrite devant moi
     decroche: boolean;         // coureur juste devant à plus de ~40 m
     ecartDevant: number;       // m jusqu'au coureur juste devant (1e9 si premier)
     tempsEnTete: number;       // s en tête, en continu
-    leadRecent: number; partRelais: number;
+    leadRecent: number;        // mon propre temps passé en tête (mémoire personnelle)
     effortRessenti: number;    // puissance actuelle en part du FTP (palier ressenti)
     groupeTaille: number;      // coureurs dans mon groupe (moi compris)
+    groupeEtendue: number;     // m entre le premier et le dernier de mon groupe que je vois
     rangDansGroupe: number;    // 0 = premier de mon groupe
     evenements: EvenementAgir[];   // ce qu'Agir m'a déclaré depuis ma dernière décision
   };
   rivaux: {
-    allure: number;            // vitesse médiane des coureurs encore en course (m/s)
+    allure: number;            // vitesse du groupe que je perçois (m/s)
+    tendanceAllure: number;    // variation de cette allure sur ~10 s (m/s)
     devantId: number | null; devantLetter: string | null;      // la roue qui m'abrite
-    meneurId: number | null; meneurLetter: string | null; meneurDepuis: number;
-    quelquunPasse: boolean;
-    moyenneRelaisAutres: number;
-    meilleurePointe: number; sprinteurDangereux: boolean; sprinteurLetter: string | null;
-    attaque: { id: number; letter: string; avance: number; depuis: number; danger: number } | null;
-    autres: AutreCoureur[];
+    vus: VuAutre[];
+    attaque: { id: number; letter: string; avance: number; depuis: number; vRel: number } | null;
   };
   course: { distRestante: number; distParcourue: number; ventFace: number; ventCote: number };
   role: { objectif: 'gagner' };
-  profil: { endurance: number; pointe: number; agressivite: number; experience: number };
+  profil: { endurance: number; pointe: number; agressivite: number; experience: number };   // ce que je sais de moi
 }
 
 /** Valeurs exactes correspondantes : la trace montre ce que le coureur croyait *et* la réalité (§4.1). */
 export interface Reel { reserve: number; explosivite: number; ecartDevant: number }
+
+/** Un autre coureur tel que je l'ai interprété : déduit de son comportement seul. */
+export interface AutreInterprete {
+  id: number; letter: string; dx: number;
+  disposition: 'rouleur' | 'suiveur' | 'inconnu';   // qui a roulé devant, d'après ce que j'ai vu
+  danger: number;                                   // 0..1 : danger supposé (accélère-t-il fort ?)
+  etat: 'frais' | 'marque' | 'about';               // état apparent (posture)
+}
 
 export interface Interprete {
   forme: 'frais' | 'bien' | 'limite' | 'cuit';
@@ -167,13 +218,18 @@ export interface Interprete {
   distance: 'sprint' | 'proche' | 'moyenne' | 'loin';
   position: 'premier' | 'dans-la-course' | 'decroche';
   placement: 'expose' | 'abrite';
-  partRelais: 'egal' | 'plus';
   // quantités continues utilisées par « Vouloir »
   reserveBasse: number;       // 0..1
   explosiviteBasse: number;   // 0..1
-  excesRelais: number;        // 0..1 : j'ai plus roulé que les autres
-  rasLeBol: number;           // 0..1 : je suis presque seul à rouler
+  excesRelais: number;        // 0..1 : j'ai plus roulé que ce que j'ai vu des autres
+  rasLeBol: number;           // 0..1 : je suis presque seul à rouler (d'après ce que j'ai vu)
   sprintFocus: number;        // 0..1 : mon atout est le sprint
+  autres: AutreInterprete[];
+  groupe: { taille: number; rythme: 'stable' | 'monte' | 'baisse'; cohesion: 'serre' | 'etire' };
+  dangerMax: number;          // 0..1 : le plus dangereux des autres, supposé
+  dangerLetter: string | null;
+  fractionFrais: number;      // 0..1 : part des autres qui ont l'air frais
+  avanceSurVus: number;       // m : écart avec le plus proche coureur que je vois derrière (25 si aucun)
   phrases: string[];          // « je me sens frais », « je suis décroché »…
 }
 
@@ -219,6 +275,7 @@ export interface Result {
   ordre: number[];            // classement final, ids (les coureurs encore en route à la fin sont classés selon leur position)
   vainqueur: number | null;
   tFin: number;
+  neutralisee: boolean;       // garde-fou technique : la course a dépassé la durée maximale (personne n'avance) et a été arrêtée
 }
 
 export interface World {
