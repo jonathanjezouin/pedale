@@ -92,6 +92,7 @@ export interface Geste {
   place: Place | null;         // place visée pour laquelle la phase courante a été engagée
   roueId: number | null;       // roue actuellement suivie (pour réinitialiser filtre et recherche d'abri)
   vRoue: number;               // vitesse de la roue telle que je la perçois (filtrée par mon délai de réaction)
+  aRoue: number;               // accélération de la roue telle que je l'estime (dérivée filtrée de vRoue) : sert à anticiper (v0.1.1)
   dyAbri: number;              // décalage latéral trouvé par la recherche locale de l'abri (m)
   sensAbri: 1 | -1;            // sens de la recherche locale
   abriPrev: number;            // abri ressenti à la précédente comparaison

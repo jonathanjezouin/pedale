@@ -83,9 +83,14 @@ export function updateRiders(w: World, sel: number) {
 /* ---------------- explication d'un coureur ---------------- */
 let showAlt = false;
 export const toggleAlt = () => { showAlt = !showAlt; };
+let traceKey = '';
 export function updateTrace(w: World, id: number) {
   const r = w.riders[id]!, d = r.last, el = $('trace');
-  if (!d) { el.innerHTML = '<div class="muted">En attente de la première décision…</div>'; return; }
+  if (!d) { traceKey = ''; el.innerHTML = '<div class="muted">En attente de la première décision…</div>'; return; }
+  // le panneau ne change qu'avec la décision (v0.1.1) : le reconstruire toutes les 0,2 s coûtait une mise en page complète et faisait perdre le défilement
+  const key = `${w.cfg.seed}|${id}|${d.t}|${r.intent.kind}|${r.intent.since}|${showAlt}`;
+  if (key === traceKey && el.firstElementChild) return;
+  traceKey = key;
   const p = d.percu, it = d.interprete;
   const pills = [
     `réserve ${Math.round(p.moi.reserve * 100)} %`, `explosivité ${Math.round(p.moi.explosivite * 100)} %`, `jambes chargées ${Math.round(p.moi.aigue * 100)} %`,

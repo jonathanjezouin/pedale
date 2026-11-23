@@ -7,7 +7,7 @@
    ===================================================================== */
 import type { EvenementAgir, Intention, Rider, World } from './types';
 import { PLACE_LABEL } from './types';
-import { capExplosif, FREINAGE_MAX, puissanceVers, RIDER_LEN, vitesseSolo, wattsPour } from './physics';
+import { aspirationValeur, capExplosif, FREINAGE_MAX, puissanceVers, RIDER_LEN, vitesseSolo, wattsPour } from './physics';
 import { abrite, axeY, decalage, enLigne, limiter, placeDansLaFile, roueEnLigne, yDescendant, yMontant } from './placement';
 import { clamp } from './util';
 import { libellePalier } from './paliers';
@@ -50,7 +50,7 @@ function roueChoisie(w: World, r: Rider): Rider | null {
 function lierRoue(w: World, r: Rider, roue: Rider) {
   const ge = r.geste;
   if (ge.roueId === roue.id) return;
-  ge.roueId = roue.id; ge.vRoue = roue.v; ge.dyAbri = 0; ge.sensAbri = 1; ge.abriPrev = r.draft; ge.abriT = w.t; ge.latErr = 0;
+  ge.roueId = roue.id; ge.vRoue = roue.v; ge.aRoue = 0; ge.dyAbri = 0; ge.sensAbri = 1; ge.abriPrev = r.draft; ge.abriT = w.t; ge.latErr = 0;
 }
 
 /** Suivre une roue : vitesse cible = celle de la roue (telle que je la perçois, avec mon délai) + correction d'écart.
@@ -58,12 +58,19 @@ function lierRoue(w: World, r: Rider, roue: Rider) {
 function suivre(w: World, roue: Rider, r: Rider, aMax = 1.2): number {
   const it = r.intent, ge = r.geste, ex = r.exec;
   lierRoue(w, r, roue);
+  const vAvant = ge.vRoue;
   ge.vRoue += (roue.v - ge.vRoue) * (1 - Math.exp(-w.cfg.dt / Math.max(0.05, ex.delai)));      // délai de réaction
+  // anticipation (v0.1.1) : j'estime l'accélération de la roue (dérivée filtrée de ce que je perçois de sa vitesse) et je vise où elle sera
+  // dans le temps que je mets à réagir, au lieu d'attendre que l'écart se creuse. Un coureur expérimenté (délai court) lit mieux.
+  ge.aRoue += ((ge.vRoue - vAvant) / w.cfg.dt - ge.aRoue) * (1 - Math.exp(-w.cfg.dt / 0.5));
   const gap = roue.x - r.x - RIDER_LEN;
+  const vAnticipee = ge.vRoue + clamp(ge.aRoue, 0, 2) * (ex.delai + 0.6);
   // empressement : on vise une roue à son écart de confort ; plus l'écart est grand, plus on rattrape vite (l'aspiration vaut jusqu'à ~38 % de puissance)
-  const vDes = clamp(ge.vRoue + 1.1 * (gap - ex.ecartConfort), ge.vRoue - 3, ge.vRoue + 4);
-  // l'abri a de la valeur : pour reprendre la roue on accepte de dépasser un peu l'effort soutenable, jusqu'à `effortMax`
-  const urgence = clamp((gap - 1.0) / 4, 0, 1);
+  const vDes = clamp(vAnticipee + 1.1 * (gap - ex.ecartConfort), ge.vRoue - 3, ge.vRoue + 4);
+  // l'abri a de la valeur : pour reprendre la roue on accepte de dépasser un peu l'effort soutenable, jusqu'à `effortMax` (dès 0,8 m d'écart, plein à 3,5 m ; avant : 5 m).
+  // Cette valeur est celle de l'abri que je retrouverais à mon écart de confort : sans aspiration, rien ne justifie de forcer.
+  const valeurAbri = clamp(aspirationValeur(ex.ecartConfort, 0) / 0.3, 0, 1);
+  const urgence = valeurAbri * clamp((gap - 0.8) / 2.7, 0, 1);
   const base = wattsPour(r, Math.min(1, it.effortMax));
   const lim = Math.min(capExplosif(r), base * (1 + Math.max(0, it.effortMax - 1) * urgence));
   const pDes = puissanceVers(vDes, r.v, r, aMax * 1.5, FREINAGE_MAX);      // un suiveur peut freiner pour ne pas toucher la roue

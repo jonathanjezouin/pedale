@@ -307,3 +307,31 @@ describe('v0.1.0 : plus d\'immobilisation sur une rampe', () => {
     expect(w.riders.every((r) => r.finishTime !== null)).toBe(true);
   }, 240000);
 });
+
+describe('v0.1.1 : un suiveur colle à la roue qu\'il suit', () => {
+  it('l\'anticipation de l\'accélération de la roue est estimée et reste bornée', () => {
+    const w = creerMonde({ seed: 3 });
+    let aMax = 0, aMin = 0;
+    for (let i = 0; i < 1200; i++) { pas(w); for (const r of w.riders) { aMax = Math.max(aMax, r.geste.aRoue); aMin = Math.min(aMin, r.geste.aRoue); } }
+    expect(aMax).toBeGreaterThan(0.05);      // quelqu'un voit bien une roue accélérer
+    expect(aMax).toBeLessThan(4); expect(aMin).toBeGreaterThan(-4);
+  }, 60000);
+  it('les écarts à la roue suivie : médiane sous 1 m, et moins de 19 % du temps au-delà de 3,5 m (20,4 % avant la v0.1.1)', () => {
+    const gaps: number[] = [];
+    for (const seed of [1, 2, 3, 4]) {
+      const w = creerMonde({ seed });
+      while (w.result.statut !== 'termine' && w.t < 1500) {
+        pas(w);
+        for (const r of w.riders) {
+          const id = r.geste.roueId; if (id === null || r.status !== 'course' || r.intent.kind !== 'abriter') continue;
+          const o = w.riders[id]!, gap = o.x - r.x - 1.8;      // RIDER_LEN
+          if (gap >= 0 && gap <= 30 && Math.abs(o.y - r.y) <= 2) gaps.push(gap);
+        }
+      }
+    }
+    gaps.sort((a, b) => a - b);
+    expect(gaps.length).toBeGreaterThan(20000);
+    expect(gaps[Math.floor(gaps.length / 2)]!).toBeLessThan(1);
+    expect(gaps.filter((g) => g > 3.5).length / gaps.length).toBeLessThan(0.19);
+  }, 120000);
+});

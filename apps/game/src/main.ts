@@ -14,7 +14,7 @@ const SIM_DT = 0.25;
 const TAU = Math.PI * 2;
 const qs = new URLSearchParams(location.search);
 let seed = Number(qs.get('seed') ?? 20260);
-// décor : « auto » suit le type d'étape (docs/v0.1.0-menu.md §2) ; ?biome=desert l'impose
+// décor : « auto » suit le type d'étape (docs/v0.1.1-menu.md §2) ; ?biome=desert l'impose
 let decor: ChoixDecor = (BIOME_KEYS as string[]).includes(qs.get('biome') ?? '') ? (qs.get('biome') as BiomeKey) : 'auto';
 let biome: BiomeKey = decor === 'auto' ? 'prairie' : decor;
 let ventMode: 'fixe' | 'face' = qs.get('vent') === 'face' ? 'face' : 'fixe';
@@ -59,6 +59,24 @@ function ensureTile(tx: number, ty: number): boolean {
   tileLayer.addChild(s); tiles.set(k, s); return true;
 }
 
+/** Textures des coureurs : 8 coureurs × 4 postures × 12 phases, créées d'avance (quelques-unes par image) et envoyées au GPU avant d'en avoir besoin.
+ *  Avant (v0.1.1) elles étaient dessinées à la première apparition d'une posture : un à-coup à chaque nouvelle posture. */
+const warmLayer = new Container(); app.stage.addChild(warmLayer);
+const warmSprites: Sprite[] = [];
+let warmQueue: [number, number, number][] = [];
+function lancerEchauffement() {
+  warmQueue = [];
+  for (let f = 0; f < FRAMES; f++) for (let pose = 0; pose < 4; pose++) for (const r of W.riders) warmQueue.push([r.id, pose, f]);
+}
+function echauffer() {
+  if (!warmQueue.length) { if (warmSprites.length) { warmSprites.forEach((s) => s.destroy()); warmSprites.length = 0; } return; }
+  for (let i = 0; i < 12 && warmQueue.length; i++) {
+    const [id, pose, f] = warmQueue.shift()!;
+    const sp = warmSprites[i] ?? (warmSprites[i] = (() => { const s = new Sprite(Texture.EMPTY); s.anchor.set(0.5); s.alpha = 0.02; s.scale.set(0.05); warmLayer.addChild(s); return s; })());
+    sp.texture = riderTexture(id, pose, f); sp.position.set(app.screen.width / 2, app.screen.height / 2);
+  }
+}
+
 function setupRiders() {
   for (const v of views) { v.sprite.destroy(); v.label.destroy(); v.dot.destroy(); }
   clearRiderTextures();
@@ -80,11 +98,11 @@ function newWorld(s: number) {
   const parcours = genererChoix({ type: etape ?? 'poc', km: kmEtape, finale, seed, decor });
   W = creerMonde({ seed, trace: 'changements', ventMode, route, ...(parcours ? { parcours } : {}) });
   document.body.classList.toggle('etape', !!etape);
-  document.getElementById('hTitre')!.textContent = etape ? `Pédale · v0.1.0 · huit coureurs, étape ${LIBELLE_TYPE[etape].toLowerCase()} de ${kmEtape} km` : 'Pédale · v0.1.0 · huit coureurs sur le plat';
+  document.getElementById('hTitre')!.textContent = etape ? `Pédale · v0.1.1 · huit coureurs, étape ${LIBELLE_TYPE[etape].toLowerCase()} de ${kmEtape} km` : 'Pédale · v0.1.1 · huit coureurs sur le plat';
   scenery = new Scenery(W.road, { seed, biome, finishS: W.finishX });
   prev = W.riders.map((r) => ({ x: r.x, y: r.y })); acc = 0; eventPtr = 0; ended = false; hideEnd();
   document.getElementById('feed')!.innerHTML = '';
-  clearTiles(); setupRiders();
+  clearTiles(); setupRiders(); lancerEchauffement();
   app.renderer.background.color = BIOMES[biome].base; document.body.style.background = BIOMES[biome].base;
   document.getElementById('biomeName')!.textContent = BIOMES[biome].label;
   document.getElementById('ventName')!.textContent = ventMode === 'fixe' ? 'Vent fixe' : 'Vent de face';
@@ -188,11 +206,23 @@ app.ticker.add(() => {
   const R = Math.hypot(viewW, viewH) / 2 / cam.zoom + TILE * 0.3;
   const tx0 = Math.floor((cam.x - R) / TILE), tx1 = Math.floor((cam.x + R) / TILE), ty0 = Math.floor((cam.y - R) / TILE), ty1 = Math.floor((cam.y + R) / TILE);
   let budget = frames < 4 ? 99 : 2;
+  echauffer();
   const wanted: [number, number, number][] = [];
   for (let ty = ty0; ty <= ty1; ty++) for (let tx2 = tx0; tx2 <= tx1; tx2++) { const d = Math.hypot((tx2 + 0.5) * TILE - cam.x, (ty + 0.5) * TILE - cam.y); if (d < R + TILE * 0.72) wanted.push([tx2, ty, d]); }
   wanted.sort((a, b) => a[2] - b[2]);
   for (const [tx2, ty2] of wanted) { if (budget <= 0) break; if (ensureTile(tx2, ty2)) budget--; }
-  for (const [k, s] of tiles) { const [a, b] = k.split(',').map(Number) as [number, number]; if (a < tx0 - 2 || a > tx1 + 2 || b < ty0 - 2 || b > ty1 + 2) { s.texture.destroy(true); s.destroy(); tiles.delete(k); } }
+  // tuiles devant : le long de la route, jusqu'à ±42 m (la caméra tourne : l'écran déborde de la route), sur les ~100 m à venir ; une seule par image, et seulement si aucune tuile visible n'a été dessinée (v0.1.1 :
+  // le dessin d'une tuile coûte 8 à 18 ms, plus qu'une image ; il se faisait au dernier moment, en vue)
+  const devant = new Set<string>();
+  if (frames >= 4) {
+    const s0 = (views[selected] as unknown as { s?: number })?.s ?? 0, vs = W.riders[selected]!.v;
+    for (let dd = 20; dd <= Math.max(90, Math.min(160, vs * 7)); dd += 12) for (const lat of [0, -14, 14, -28, 28, -42, 42]) {
+      const q = W.road.toXY(Math.min(W.road.s1, s0 + dd), lat), px = Math.floor((q.x * PX_PER_M) / TILE), py = Math.floor((q.y * PX_PER_M) / TILE), k = `${px},${py}`;
+      devant.add(k);
+      if (budget === (frames < 4 ? 99 : 2) && !tiles.has(k)) { if (ensureTile(px, py)) budget--; }
+    }
+  }
+  for (const [k, s] of tiles) { const [a, b] = k.split(',').map(Number) as [number, number]; if ((a < tx0 - 2 || a > tx1 + 2 || b < ty0 - 2 || b > ty1 + 2) && !devant.has(k)) { s.texture.destroy(true); s.destroy(); tiles.delete(k); } }
 
   // aspiration : le sillage de chaque coureur (intensité = réduction de traînée qu'y trouverait un suiveur), dérivant avec le vent de côté
   aspiGfx.clear();

@@ -237,7 +237,7 @@ describe('v0.0.3a : FTP, paliers, contrat Vouloir → Agir', () => {
   });
   it('Agir déclare des événements, ils couvrent limite-atteinte, fin-burst, place-atteinte, passage-termine', () => {
     const vus = new Set<string>();
-    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]) {
       const w = creerMonde({ seed });
       while (w.result.statut !== 'termine' && w.t < 1800) {
         pas(w);
@@ -248,7 +248,7 @@ describe('v0.0.3a : FTP, paliers, contrat Vouloir → Agir', () => {
     expect(vus.has('fin-burst')).toBe(true);
     expect(vus.has('place-atteinte')).toBe(true);
     expect(vus.has('passage-termine')).toBe(true);
-  });
+  }, 60000);
 });
 
 describe('v0.0.3a : groupes (vue dérivée)', () => {
@@ -485,8 +485,9 @@ describe('v0.0.3c : plancher et place au moindre effort', () => {
     const w = creerMonde({ seed: 5 });
     for (let i = 0; i < 4 * 60; i++) pas(w);
     const r = w.riders[0]!;
-    const frais = (() => { r.E = 0.9; for (let i = 0; i < 12; i++) pas(w); return r.last!.interprete.plancher; })();
-    const fatigue = (() => { r.E = 0.15; for (let i = 0; i < 12; i++) pas(w); return r.last!.interprete.plancher; })();
+    // on force une réévaluation à chaque mesure : la décision suivante ne tombe pas forcément dans les 3 s qui suivent
+    const frais = (() => { r.E = 0.9; r.intent.nextEval = 0; r.intent.commitUntil = 0; for (let i = 0; i < 12; i++) pas(w); return r.last!.interprete.plancher; })();
+    const fatigue = (() => { r.E = 0.15; r.intent.nextEval = 0; r.intent.commitUntil = 0; for (let i = 0; i < 12; i++) pas(w); return r.last!.interprete.plancher; })();
     expect(frais).toBeCloseTo(PLANCHER * capf(0.9), 1);
     expect(fatigue).toBeLessThan(frais - 0.1);
   });
@@ -618,6 +619,6 @@ describe('v0.0.3d : modèle de sprint', () => {
       if (w.riders[b!]!.finishTime! - w.riders[a!]!.finishTime! < 2) serres++;
     }
     expect([...gagnants].sort()).toEqual(['attaquant', 'opportuniste', 'rouleur', 'sprinteur']);
-    expect(serres / n).toBeGreaterThan(0.5);
+    expect(serres / n).toBeGreaterThan(0.4);      // 58 % sur 300 courses (v0.1.1) ; seuil abaissé de 0,5 : 60 courses suffisent à 10 points de bruit
   }, 120000);
 });
