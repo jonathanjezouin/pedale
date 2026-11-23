@@ -1,5 +1,5 @@
 /* Interface HTML : fil de course, liste des coureurs, explication « pourquoi ? », fin de course. */
-import { ARCHETYPE_LABEL, INTENTION_LABEL, NIVEAUX, PLACE_LABEL, expliquer, ftpWkg, libellePalier, niveauDe, palierDe, resumeEvaluations, typePhysique } from '@pedale/sim';
+import { ARCHETYPE_LABEL, INTENTION_LABEL, NIVEAUX, PLACE_LABEL, durabilitePct, expliquer, ftpWkg, libellePalier, niveauDe, palierDe, resumeEvaluations, typePhysique } from '@pedale/sim';
 import type { Intention, Rider, SimEvent, World } from '@pedale/sim';
 import { PALETTES } from './riders';
 
@@ -88,7 +88,7 @@ export function updateTrace(w: World, id: number) {
   if (!d) { el.innerHTML = '<div class="muted">En attente de la première décision…</div>'; return; }
   const p = d.percu, it = d.interprete;
   const pills = [
-    `réserve ${Math.round(p.moi.reserve * 100)} %`, `explosivité ${Math.round(p.moi.explosivite * 100)} %`,
+    `réserve ${Math.round(p.moi.reserve * 100)} %`, `explosivité ${Math.round(p.moi.explosivite * 100)} %`, `jambes chargées ${Math.round(p.moi.aigue * 100)} %`,
     `allure ${(p.rivaux.allure * 3.6).toFixed(0)} km/h`, `effort ressenti ${palierDe(p.moi.effortRessenti).code} (${Math.round(p.moi.effortRessenti * 100)} % du FTP)`,
     ...(p.moi.groupeTaille > 1 ? [`groupe de ${p.moi.groupeTaille}`] : []),
     p.moi.decroche ? `décroché (${Math.round(p.moi.ecartDevant)} m)` : p.moi.rang === 0 ? 'premier' : `${p.moi.rang + 1}e${p.moi.abrite > 0.12 ? ', abrité' : ', exposé'}`,
@@ -104,7 +104,7 @@ export function updateTrace(w: World, id: number) {
   el.innerHTML = `
     <h2><span>Pourquoi ?</span><span class="muted">décision de ${fmtT(d.t)} · ${d.declencheur}</span></h2>
     <div class="who">Coureur ${r.letter}, ${ARCHETYPE_LABEL[r.archetype]}</div>
-    <div class="muted">à ${fmtKm(d.distRestante)} de l'arrivée · FTP ${ftpWkg(r.profile).toFixed(1).replace('.', ',')} W/kg (${NIVEAUX[niveauDe('ftp', ftpWkg(r.profile))]}) · pointe ${Math.round(r.profile.pPeak)} W · type physique : ${typePhysique(r.profile)}</div>
+    <div class="muted">à ${fmtKm(d.distRestante)} de l'arrivée · FTP ${ftpWkg(r.profile).toFixed(1).replace('.', ',')} W/kg (${NIVEAUX[niveauDe('ftp', ftpWkg(r.profile))]}) · pointe ${Math.round(r.profile.pPeak)} W · type physique : ${typePhysique(r.profile)} · sens de la course ${mot(r.profile.sens)} · sang-froid ${mot(r.profile.sangFroid)} · durabilité ${durabilitePct(r.profile.tEnd).toFixed(1).replace('.', ',')} %</div>
     <div class="sec"><b>Perçu</b><div class="pills">${pills.map((t) => `<span>${t}</span>`).join('')}</div>
       <div class="muted">Réel : réserve ${Math.round(d.reel.reserve * 100)} % — le coureur la ressent à ${Math.round(p.moi.reserve * 100)} % (approximatif).</div></div>
     <div class="sec"><b>Interprété</b>${cap(it.phrases.join(', '))}.</div>
@@ -126,6 +126,9 @@ function limitesTexte(r: Rider): string {
   const groupe = i.kind === 'abriter' || i.kind === 'placer' || i.kind === 'participer' ? ` · place visée : ${i.place === 'derriere' && i.cible !== null ? 'derrière ' + String.fromCharCode(65 + i.cible) : PLACE_LABEL[i.place]}` : '';
   return `${visé} · accepte jusqu'à ${palierDe(i.effortMax).code} (${Math.round(i.effortMax * 100)} %) · fatigue max ${Math.round(i.fatigueMax * 100)} %${groupe}`;
 }
+
+/** Valeur 0..1 d'un attribut mental en mots. */
+const mot = (v: number) => (v < 0.4 ? 'faible' : v < 0.6 ? 'moyen' : v < 0.8 ? 'bon' : 'très bon');
 
 /* ---------------- fil de course ---------------- */
 export function pushFeed(e: SimEvent) {

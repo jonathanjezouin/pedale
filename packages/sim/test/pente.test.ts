@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { genererParcours } from '@pedale/parcours';
 import {
-  A_LAT, COMPOSITION_ETAPE, FREINAGE_DESCENTE, PLANCHER, PROLONGEMENT_AVANT, REF_APTITUDES, ROAD_DS, TYPES_PHYSIQUES, USURE_ETAPE, USURE_FINALE, V_DROITE,
+  A_LAT, COMPOSITION_ETAPE, bruitAutres, bruitDe, capSoutenu, durabilitePct, FREINAGE_DESCENTE, PLANCHER, PROLONGEMENT_AVANT, REF_APTITUDES, ROAD_DS, TYPES_PHYSIQUES, USURE_ETAPE, USURE_FINALE, V_DROITE,
   aptitudes, consommer, creerMonde, creerRoute, creerRouteDepuisParcours, forcePenteRoulement, interpreter, pas, percevoir, resistance, simuler, typePhysique, vitesseSolo,
 } from '../src/index';
 
@@ -228,10 +228,10 @@ describe('v0.0.5 : une étape se court, la pente fait le reste', () => {
     expect(moy(cote)).toBeLessThan(0.6 * moy(plat));
   }, 120000);
   it('les grimpeurs gagnent bien plus souvent qu\'un huitième au hasard sur des étapes de montagne', () => {
-    let grimpeurs = 0; const n = 16;
+    let grimpeurs = 0; const n = 24;
     for (let s = 0; s < n; s++) { const w = courir("montagne", 100, 40 + s); if (w.riders[w.result.ordre[0]!]!.archetype === 'grimpeur') grimpeurs++; }
-    expect(grimpeurs / n).toBeGreaterThan(0.25);       // 2 grimpeurs sur 8 = 25 % au hasard ; ~50 % sur 30 étapes (batch)
-  }, 180000);
+    expect(grimpeurs / n).toBeGreaterThan(0.25);       // 2 grimpeurs sur 8 = 25 % au hasard ; ~37 % sur 30 étapes (batch v0.0.7)
+  }, 300000);
 });
 
 describe('v0.0.6 : le vent d\'une étape ne dépend pas du cap moyen du tracé', () => {
@@ -253,5 +253,53 @@ describe('v0.0.6 : le vent d\'une étape ne dépend pas du cap moyen du tracé',
     const w = creerMonde({ seed: 20260 });
     const phi = w.road.capMoyen(0, w.cfg.distance) + w.cfg.ventDecalage;
     expect(dir(w)).toBeCloseTo(Math.atan2(-Math.sin(phi), -Math.cos(phi)), 6);
+  });
+});
+
+describe('v0.0.7 : fatigue aiguë, durabilité, sens de la course et sang-froid', () => {
+  const mk = () => mondeEtape('plate', 30, 9).riders[0]!;
+  it('la fatigue aiguë monte au-dessus du plancher, redescend en dessous, et reste bornée', () => {
+    const r = mk(); expect(r.aigue).toBe(0);
+    for (let i = 0; i < 60; i++) consommer(r, 1.05 * r.profile.ftp, 1);
+    const haut = r.aigue; expect(haut).toBeGreaterThan(0.3); expect(haut).toBeLessThanOrEqual(1);
+    for (let i = 0; i < 600; i++) consommer(r, 0.6 * r.profile.ftp, 1);
+    expect(r.aigue).toBeLessThan(haut * 0.5);
+    for (let i = 0; i < 3000; i++) consommer(r, 1.2 * r.profile.ftp, 1);
+    expect(r.aigue).toBe(1);
+  });
+  it('rester au plancher ne charge pas les jambes', () => {
+    const r = mk(); for (let i = 0; i < 600; i++) consommer(r, PLANCHER * r.profile.ftp, 1);
+    expect(r.aigue).toBeLessThan(0.01);
+  });
+  it('la fatigue aiguë et l\'usure baissent un peu la capacité soutenue, seulement en étape pour l\'usure', () => {
+    const r = mk(); const c0 = capSoutenu(r);
+    r.aigue = 1; expect(capSoutenu(r)).toBeLessThan(c0); expect(capSoutenu(r)).toBeGreaterThan(0.9 * c0);
+    r.aigue = 0; r.E = 0.5; const etape = capSoutenu(r);
+    r.usure = USURE_FINALE; r.E = 0.5; expect(capSoutenu(r)).toBeGreaterThan(etape);
+  });
+  it('un tour de relais finit : en tête à l\'allure du groupe, on cède la place quand les jambes chargent, et on y revient reposé', () => {
+    let tours = 0, longs = 0;
+    for (const s of [3, 4, 5]) {
+      const w = creerMonde({ seed: s, parcours: genererParcours({ seed: s, distance: 40000, type: 'plate' }) });
+      simuler(w);
+      for (const r of w.riders) { tours += r.stats.relaisPris; if (r.stats.maxLeadStreak > 1500) longs++; }
+    }
+    expect(tours).toBeGreaterThan(30);   // ça tourne
+    expect(longs).toBeLessThan(6);       // personne ne mène éternellement
+  }, 120000);
+  it('la durabilité lue est une mesure du modèle : croissante avec tEnd', () => {
+    expect(durabilitePct(3500)).toBeGreaterThan(durabilitePct(2500));
+  });
+  it('sens de la course et sang-froid : bornés, propres à chaque coureur, et le sang-froid garde le bruit sous la pression', () => {
+    const w = mondeEtape('plate', 30, 2);
+    for (const r of w.riders) { expect(r.profile.sens).toBeGreaterThanOrEqual(0.3); expect(r.profile.sens).toBeLessThanOrEqual(1); expect(r.profile.sangFroid).toBeGreaterThanOrEqual(0.3); expect(r.profile.sangFroid).toBeLessThanOrEqual(0.9); }
+    expect(new Set(w.riders.map((r) => r.profile.sens.toFixed(4))).size).toBeGreaterThan(4);
+    const r = w.riders[0]!; r.E = 0.2; r.decroche = true;
+    r.profile.sangFroid = 0.9; const calme = bruitDe(r), calmeA = bruitAutres(r);
+    r.profile.sangFroid = 0.3; expect(bruitDe(r)).toBeGreaterThan(calme); expect(bruitAutres(r)).toBeGreaterThan(calmeA);
+  });
+  it('un meilleur sens de la course donne une lecture moins bruitée des autres, sans changer le bruit sur soi', () => {
+    const r = mk(); r.profile.sens = 0.9; const bon = bruitAutres(r), soi = bruitDe(r);
+    r.profile.sens = 0.3; expect(bruitAutres(r)).toBeGreaterThan(bon); expect(bruitDe(r)).toBe(soi);
   });
 });

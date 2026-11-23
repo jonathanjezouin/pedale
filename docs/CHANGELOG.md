@@ -1,5 +1,12 @@
 # Journal des versions
 
+## v0.0.7 — fatigue aiguë, durabilité, mental, équilibrage
+- **Fatigue aiguë** : monte au-dessus du plancher, redescend dessous ; raisons « mes jambes chargent » / « reposées » : la durée d'un tour de relais émerge (changements de tête 60 → 96 par course). Inactive en côte.
+- **Durabilité recalée par mesure** : constat qu'elle n'avait aucun effet en étape (capacité plate tant que `E` > 0,4) ; usure de fond progressive en étape ; `durabilitePct` mesurée sur le modèle (plus de table), seuils recalés.
+- **Sens de la course et sang-froid** : lecture des autres moins bruitée avec le sens ; le bruit monte moins sous pression avec le sang-froid ; affichés dans le panneau.
+- **Équilibrage** : cause du sprinteur faible trouvée (lancement trop tardif) ; POC 32 / 10 / 38 / 20 → 30 / 19 / 26 / 24 %.
+- Contrepartie : la sélection en côte est moins marquée (grimpeurs 47 → 37 % en montagne). Manques listés dans `docs/v0.0.7-fatigue.md` §6. Tests : 80 → 87.
+
 ## v0.0.6 — menu de parcours, décor, vent
 - **Menu de parcours** (`P`) : type, distance 20-250 km, finale, seed, décor, avec aperçu (profil, tracé, montées classées, phrase de l'évaluateur) ; le lien reproduit le choix ; il s'ouvre seul sans `seed` ni `etape` dans l'adresse.
 - **Décor** : décor « montagne » ajouté ; décor automatique selon le type d'étape.

@@ -135,11 +135,10 @@ describe('calibration WorldTour (v0.0.3)', () => {
     expect(niveauDe('ftp', 6.4)).toBe(3);
     expect(niveauDe('ftp', 7)).toBe(4);
   });
-  it('la durabilité lisible est croissante avec tEnd et bornée', () => {
-    expect(durabilitePct(2600)).toBeCloseTo(94, 5);
+  it('la durabilité lisible est mesurée sur le modèle d\'étape : croissante avec tEnd, entre 97 et 99,5 % pour les endurances usuelles, falaise pour une réserve vide', () => {
     expect(durabilitePct(3200)).toBeGreaterThan(durabilitePct(2800));
-    expect(durabilitePct(100)).toBe(90);
-    expect(durabilitePct(9000)).toBeLessThanOrEqual(99.5);
+    expect(durabilitePct(2000)).toBeGreaterThan(97); expect(durabilitePct(9000)).toBeLessThanOrEqual(99.5);
+    expect(durabilitePct(100)).toBeLessThan(70);       // 3000 kJ vident la réserve : on retombe sur la falaise de capf
   });
   it('les coureurs générés sont de niveau WorldTour : FTP entre 5 et 6,7 W/kg (poids du coureur sans le vélo)', () => {
     for (let seed = 1; seed <= 40; seed++) {

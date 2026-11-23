@@ -46,7 +46,9 @@ export interface Profile {
   cda: number;       // surface frontale × traînée (m²)
   // tempérament
   agressivite: number;  // 0..1
-  experience: number;   // 0..1 (réduit les défauts ; sert surtout au bruit, plus tard)
+  experience: number;   // 0..1 (réduit le bruit sur soi et les défauts d'exécution)
+  sens: number;         // 0..1 sens de la course : qualité de la lecture des autres (positions, vitesses, intentions)
+  sangFroid: number;    // 0..1 : le bruit ne monte pas quand on est sous pression (fatigue, décroché, sprint)
   // dérivé
   pointe: number;       // 0..1, pointe de vitesse normalisée
   lateral: number;      // habitude de placement : décalage latéral personnel dans la file (m)
@@ -136,6 +138,7 @@ export interface Rider {
   // état physique
   x: number; y: number; v: number; p: number;
   E: number;  // réserve d'endurance 0..1
+  aigue: number;  // fatigue aiguë 0..1 : monte au-dessus du plancher, redescend en dessous (docs/v0.0.7-fatigue.md §1)
   X: number;  // explosivité disponible 0..1
   usure: { echelle: number; legere: boolean };   // régime d'usure de la réserve : fin d'étape du POC ou étape (docs/v0.0.5-pente.md §6)
   tSprint: number;  // secondes cumulées à un effort neuromusculaire (au-dessus de 1,25 × FTP) : la puissance maximale retombe avec elles
@@ -185,6 +188,7 @@ export interface VuAutre {
 export interface Percu {
   moi: {
     reserve: number; explosivite: number; vitesse: number;   // ressenties : approximatives (bruit + biais)
+    aigue: number;   // fatigue aiguë ressentie
     abrite: number;            // abri ressenti (0 = exposé), bruité
     rang: number;              // position de course : 0 = premier
     estEnTete: boolean;        // personne ne m'abrite devant moi
@@ -235,6 +239,7 @@ export interface Interprete {
   // quantités continues utilisées par « Vouloir »
   reserveBasse: number;       // 0..1
   explosiviteBasse: number;   // 0..1
+  aigue: number;              // 0..1 : jambes qui chargent (au-dessus du plancher depuis un moment)
   excesRelais: number;        // 0..1 : j'ai plus roulé que ce que j'ai vu des autres
   rasLeBol: number;           // 0..1 : je suis presque seul à rouler (d'après ce que j'ai vu)
   sprintFocus: number;        // 0..1 : mon atout est le sprint

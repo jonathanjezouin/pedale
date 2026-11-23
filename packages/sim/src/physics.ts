@@ -24,7 +24,14 @@ export const X_MIN = 0.15;          // explosivité minimale pour attaquer / sui
 /** Part de la puissance disponible en soutenu selon la réserve d'endurance. */
 export const capf = (E: number) => 0.62 + 0.38 * clamp(E / 0.4, 0, 1);
 
-export const capSoutenu = (r: Rider) => r.profile.ftp * capf(r.E);
+/** Durabilité d'étape (docs/v0.0.7-fatigue.md §2) : au-delà de la falaise de `capf`, la capacité soutenue s'érode progressivement avec l'usure de la réserve
+ *  (perte maximale `DUR_PERTE` quand `E` = 0). Seulement en étape : la finale du POC arrive déjà entamée et garde sa falaise. */
+export const DUR_PERTE = 0.06;
+export const facteurFond = (u: { legere: boolean }, E: number) => (u.legere ? 1 - DUR_PERTE * (1 - E) : 1);
+/** Fatigue aiguë F (0..1) : monte au-dessus du plancher, redescend en dessous ; baisse un peu la capacité soutenue. C'est elle qui fait la durée d'un tour de relais. */
+export const AIGUE = { montee: 0.085, descente: 0.012, effet: 0.03 };
+
+export const capSoutenu = (r: Rider) => r.profile.ftp * capf(r.E) * facteurFond(r.usure, r.E) * (1 - AIGUE.effet * r.aigue);
 
 /** Décroissance neuromusculaire d'un effort maximal : la puissance qu'on peut produire retombe avec le temps passé au-dessus de 1,25 × FTP
  *  (≈ 100 % de la pointe à 5 s, ≈ 60 % à 15 s, ≈ 45 % à 30 s), en plus de l'épuisement de l'explosivité. Elle se récupère vite quand on relâche. */
@@ -128,6 +135,8 @@ export function consommer(r: Rider, p: number, dt: number): void {
   // usure en cube de l'effort ; sous le plancher elle chute encore (coût × (effort / plancher)³) : 5 h à 55 % du FTP ne vident pas la réserve (docs/v0.0.5-pente.md §6)
   const leger = r.usure.legere && ratio < PLANCHER ? Math.pow(ratio / PLANCHER, 3) : 1;
   r.E = clamp(r.E - (ratio * ratio * ratio * leger * dt) / (r.profile.tEnd * r.usure.echelle), 0, 1);
+  // fatigue aiguë : monte au-dessus du plancher, redescend en dessous (plus vite qu'on ne l'a chargée n'est pas le cas : la récupération prend des minutes)
+  r.aigue = clamp(r.aigue + (ratio > PLANCHER ? AIGUE.montee * (ratio - PLANCHER) : -AIGUE.descente * (PLANCHER - ratio)) * dt, 0, 1);
   if (p > ftp) {
     r.X = clamp(r.X - ((p - ftp) * dt) / r.profile.wPrime, 0, 1);
   } else {

@@ -7,6 +7,8 @@
    ===================================================================== */
 
 import type { Profile } from './types';
+import { capf, facteurFond, USURE_ETAPE } from './physics';
+import { PLANCHER } from './paliers';
 
 /** Masse du vélo (kg) : `Profile.mass` = coureur + vélo ; les W/kg se comptent sur le coureur seul. */
 export const VELO_KG = 7;
@@ -31,7 +33,7 @@ export const ANCRAGES = {
   ftp:         { unite: 'W/kg', seuils: [5.0, 5.7, 6.2, 6.6] },
   explosivite: { unite: 'kJ',   seuils: [15, 20, 25, 30] },
   pointe:      { unite: 'W',    seuils: [1100, 1400, 1700, 2000] },
-  durabilite:  { unite: '% du FTP conservé après 3000 kJ', seuils: [91, 94, 96, 98] },
+  durabilite:  { unite: '% du FTP conservé après 3000 kJ', seuils: [97.2, 97.7, 98.0, 98.4] },
 } as const satisfies Record<string, Ancrage>;
 
 export type Attribut = keyof typeof ANCRAGES;
@@ -49,16 +51,13 @@ export function niveauDe(attr: Attribut, valeur: number): Niveau {
 /** FTP en W/kg, rapporté au coureur seul (le modèle n'a qu'un seuil : le FTP). */
 export const ftpWkg = (p: Pick<Profile, 'ftp' | 'mass'>) => p.ftp / (p.mass - VELO_KG);
 
-/** Durabilité lisible : % du FTP conservé après 3000 kJ de travail, interpolé depuis `tEnd` (unité interne en secondes). */
-const DURABILITE_PTS: [number, number][] = [[2000, 90], [2600, 94], [3200, 96.5], [3800, 98.5], [5000, 99.5]];
+/** Durabilité lisible : % du FTP conservé après 3000 kJ de travail, **mesuré sur le modèle d'étape** (docs/v0.0.7-fatigue.md §2) : un coureur de
+ *  350 W de FTP qui produit 3000 kJ à 85 % du FTP (une étape de 3 h environ) ; on lit sa capacité soutenue restante. Plus de table : la valeur suit le modèle. */
 export function durabilitePct(tEnd: number): number {
-  const pts = DURABILITE_PTS;
-  if (tEnd <= pts[0]![0]) return pts[0]![1];
-  for (let i = 1; i < pts.length; i++) {
-    const [x1, y1] = pts[i]!, [x0, y0] = pts[i - 1]!;
-    if (tEnd <= x1) return y0 + ((y1 - y0) * (tEnd - x0)) / (x1 - x0);
-  }
-  return pts[pts.length - 1]![1];
+  const f = 0.85, ftp = 350, t = 3_000_000 / (f * ftp);
+  const leger = f < PLANCHER ? Math.pow(f / PLANCHER, 3) : 1;
+  const E = Math.max(0, Math.min(1, 1 - (f * f * f * leger * t) / (tEnd * USURE_ETAPE.echelle)));
+  return 100 * capf(E) * facteurFond(USURE_ETAPE, E);
 }
 
 /** Valeurs lisibles et niveaux d'un profil (utilisé par l'interface et le rapport de cohérence). */

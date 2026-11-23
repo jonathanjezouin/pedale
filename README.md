@@ -14,7 +14,7 @@ Jeu de cyclisme sur route, vue 100 % de dessus. On incarne un seul coureur, de l
 - **Plan de développement jusqu'à la v0.1.0** : [`docs/v0.1.0-plan.md`](docs/v0.1.0-plan.md)
 - POC graphique initial (HTML seul) : [`docs/poc-graphique/`](docs/poc-graphique/index.html)
 
-## v0.0.6 — huit coureurs, une étape au choix (menu de parcours) ; raisonnement individuel ; module de parcours
+## v0.0.7 — huit coureurs, une étape au choix (menu de parcours) ; raisonnement individuel ; module de parcours
 
 Huit coureurs qui s'affrontent, chacun pour soi, sur une route qui tourne avec un vent fixe (pas de peloton poursuivant ; des groupes se forment, c'est tout). Chaque coureur
 raisonne par étages — **percevoir → interpréter → vouloir → agir** — avec 7 intentions (s'abriter, se placer, participer, attaquer, suivre, revenir, gérer) et des raisons nommées ; il ne connaît pas les autres, il les déduit de ce qu'il voit.

@@ -8,7 +8,7 @@ import type {
   AutreInterprete, Evaluation, EvenementAgir, Interprete, Intention, Percu, Place, Raison, Reel, Rider, World,
 } from './types';
 import { INTENTIONS, ARCHETYPE_LABEL } from './types';
-import { capf, E_CUIT, resistance, vitesseSolo, wattsPour, X_MIN } from './physics';
+import { capf, E_CUIT, facteurFond, resistance, vitesseSolo, wattsPour, X_MIN } from './physics';
 import { clamp, smoothstep } from './util';
 import { abrite, enLigne } from './placement';
 import { evaluer as evaluerParcours } from '@pedale/parcours';
@@ -27,12 +27,12 @@ export const TUNE = {
 };
 
 /** Distance à laquelle le coureur lance son sprint : ce que son explosivité restante lui permet de tenir,
- *  un peu plus tôt s'il est agressif, un peu plus tard s'il a une grosse pointe. */
+ *  un peu plus tôt s'il est agressif et aussi s'il a une grosse pointe (il lui faut de la distance pour passer ceux qui sont devant ; v0.0.7). */
 export function distanceSprint(r: Rider): number {
   const p = r.profile;
   // durée que l'explosivité permet, bornée par la décroissance neuromusculaire (au-delà de ~18 s, la puissance retombe trop pour qu'un sprint tienne)
   const dureeTenable = Math.min(18, (r.X * p.wPrime) / (0.75 * Math.max(100, p.pPeak - p.ftp)));   // s
-  const f = 1.05 - 0.15 * p.pointe + 0.15 * p.agressivite;
+  const f = 1.0 + 0.10 * p.pointe + 0.15 * p.agressivite;
   // quelqu'un collé à ma roue me passera si je pars à bout de souffle : je garde une marge
   const marge = r.suiviDePres ? 0.75 : 1;
   return Math.round(clamp(f * dureeTenable * 12.5 * marge, 110, 480));
@@ -184,6 +184,8 @@ export function profilRestant(w: World, x: number): EvaluationParcours | null {
 /** Charge moyenne de l'usure (effort moyen au cube, abrité, avec l'effet « sous le plancher ») pour estimer le coût du reste de l'étape.
  *  Heuristique calibrée sur des étapes simulées (docs/v0.0.5-pente.md §7). */
 const CHARGE_BUDGET = 0.6;
+/** Poids de la fatigue aiguë dans le choix de rouler ou de s'abriter (docs/v0.0.7-fatigue.md §1). */
+const AIGUE_RAISON = 2.5;
 
 /* ---------------------------- Percevoir ---------------------------- */
 
@@ -208,6 +210,7 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
     moi: {
       reserve: clamp(r.E + r.biais.reserve + gauss(r.rng) * 0.01 * sig, 0, 1),
       explosivite: clamp(r.X + r.biais.explosivite + gauss(r.rng) * 0.015 * sig, 0, 1),
+      aigue: clamp(r.aigue + gauss(r.rng) * 0.03 * sig, 0, 1),
       vitesse: r.v,
       abrite: Math.max(0, r.draft + gauss(r.rng) * 0.015 * sig),
       rang, estEnTete, decroche: r.decroche, ecartDevant: r.ecartDevant,
@@ -277,7 +280,7 @@ export function interpreter(r: Rider, p: Percu): Interprete {
   const rasLeBol = sumAll >= 90 ? clamp((mine / sumAll - 0.45) / 0.4, 0, 1) : 0;
   const sprintFocus = clamp((p.profil.pointe - 0.45) / 0.4, 0, 1);
   // mon plancher du moment, et ce que me coûterait de tenir l'allure du groupe en tête (exposé) : la question « puis-je rouler sans me cramer ? »
-  const plancher = PLANCHER * capf(p.moi.reserve);
+  const plancher = PLANCHER * capf(p.moi.reserve) * facteurFond(r.usure, p.moi.reserve);
   const vAllure = Math.max(p.rivaux.allure, 1);
   const effortRequis = (resistance(vAllure, 0, r) * vAllure) / r.profile.ftp;
 
@@ -321,6 +324,7 @@ export function interpreter(r: Rider, p: Percu): Interprete {
   return {
     forme, explosivite, distance, position, placement: p.moi.abrite > 0.12 ? 'abrite' : 'expose',
     reserveBasse: clamp((0.45 - E) / 0.35, 0, 1), explosiviteBasse: clamp((0.6 - X) / 0.4, 0, 1),
+    aigue: p.moi.aigue,
     excesRelais, rasLeBol, sprintFocus, autres, groupe: { taille: p.moi.groupeTaille, rythme, cohesion },
     terrain, colEnCours, colDevant, budget, plancher, effortRequis, inconfort: !p.moi.estEnTete && p.moi.effortRessenti > plancher + 0.03,
     inconfortEnTete: p.moi.estEnTete && effortRequis > plancher + 0.05,
@@ -356,6 +360,7 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         mk(raisons, 'reserve', 'Ma réserve est basse', 4 * it.reserveBasse);
         mk(raisons, 'dejaRoule', "J'ai déjà roulé plus que ce que j'ai vu des autres", 2.5 * it.excesRelais);
         mk(raisons, 'budget', "Ma réserve ne suffira pas pour le reste de l'étape : j'économise", 3 * budgetBas);
+        mk(raisons, 'aigue', 'Mes jambes chargent : je lève le pied pour récupérer', AIGUE_RAISON * clamp((it.aigue - 0.3) / 0.4, 0, 1) * (it.terrain === 'montee' ? 0 : 1));
         if (enTete) {
           mk(raisons, 'reculer', 'Je suis devant : pour m\'abriter il faut que je recule', -0.5);
           mk(raisons, 'inconfort', `Mener à cette allure me coûterait ${Math.round(it.effortRequis * 100)} % du FTP, au-dessus de mon plancher de ${Math.round(it.plancher * 100)} %`, 3.0 * clamp((it.effortRequis - it.plancher) / 0.1, 0, 1));
@@ -395,6 +400,8 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         mk(raisons, 'reserve', 'Ma réserve est basse', -4.5 * it.reserveBasse);
         mk(raisons, 'rasLeBol', "Je suis presque le seul à rouler depuis longtemps", -4.5 * it.rasLeBol);
         mk(raisons, 'budget', "Ma réserve ne suffira pas pour le reste de l'étape", -3 * budgetBas);
+        mk(raisons, 'aigue', 'Mes jambes chargent', -AIGUE_RAISON * clamp((it.aigue - 0.3) / 0.4, 0, 1) * (it.terrain === 'montee' ? 0 : 1));
+        mk(raisons, 'repose', 'Mes jambes sont reposées : je peux repasser devant', 1.0 * clamp((0.15 - it.aigue) / 0.15, 0, 1) * (1 - it.reserveBasse));
         break;
       }
       case 'attaquer': {

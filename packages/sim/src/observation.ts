@@ -20,7 +20,11 @@ export function gauss(rng: () => number): number {
 }
 
 /** Niveau de bruit d'un coureur : 1 pour un novice, ≈ 0,4 pour un expérimenté. */
-export const bruitDe = (r: Rider) => 1.3 - r.profile.experience;
+export const bruitDe = (r: Rider) => (1.3 - r.profile.experience) * (1 + 0.8 * (1 - r.profile.sangFroid) * stress(r));
+/** Pression du moment : réserve entamée, décroché, sprint lancé. Le sang-froid empêche le bruit d'augmenter avec elle. */
+export const stress = (r: Rider) => clamp(0.6 * (1 - r.E) + (r.decroche ? 0.3 : 0) + (r.intent.sprint ? 0.2 : 0), 0, 1);
+/** Bruit de lecture des autres : tient au sens de la course (et au sang-froid), pas à l'expérience. */
+export const bruitAutres = (r: Rider) => (1.3 - r.profile.sens) * (1 + 0.8 * (1 - r.profile.sangFroid) * stress(r));
 
 const nouveauSouvenir = (v: number, t: number): Souvenir => ({ vu: 0, tete: 0, v, accel: 0, accelMax: 0, derniereVue: t });
 
@@ -42,7 +46,7 @@ export function observer(w: World): void {
 }
 
 function observerUn(w: World, r: Rider, act: Rider[]) {
-  const sig = bruitDe(r);
+  const sig = bruitDe(r), sigA = bruitAutres(r);
   const dt = OBS_PERIODE;
   const t = w.t;
 
@@ -54,9 +58,9 @@ function observerUn(w: World, r: Rider, act: Rider[]) {
   const visibles = act.filter((o) => o !== r && o.x - r.x < VUE_DEVANT && r.x - o.x < VUE_DERRIERE);
   const vus: VuAutre[] = [];
   for (const o of visibles) {
-    const vRel = o.v - r.v + gauss(r.rng) * 0.10 * sig;
-    const dx = o.x - r.x + gauss(r.rng) * 0.35 * sig;
-    const dy = o.y - r.y + gauss(r.rng) * 0.08 * sig;
+    const vRel = o.v - r.v + gauss(r.rng) * 0.10 * sigA;
+    const dx = o.x - r.x + gauss(r.rng) * 0.35 * sigA;
+    const dy = o.y - r.y + gauss(r.rng) * 0.08 * sigA;
     // souvenir : accélération observée, temps en vue
     let s = r.memoire[o.id];
     const vObs = r.v + vRel;

@@ -1,6 +1,6 @@
 {
   "name": "@pedale/game",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": true,
   "type": "module",
   "description": "Pédale — client de jeu (rendu PixiJS + interface HTML, empaqueté avec Electron pour Steam)",
