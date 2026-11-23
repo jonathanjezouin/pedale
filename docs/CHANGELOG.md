@@ -1,5 +1,13 @@
 # Journal des versions
 
+## v0.1.0 — consolidation
+- **Validation de 3 000 étapes** (1 000 par type, 20 à 250 km) : `docs/v0.1.0-validation.md`. Outil `npm run validation -w @pedale/batch`.
+- **Défaut trouvé et corrigé** : 3,4 % des étapes de montagne (> 220 km) et 0,3 % des vallonnées se bloquaient : huit coureurs arrêtés dans une rampe à 14 % avec de la réserve (traction `P / max(v, 2)` trop faible à l'arrêt). Plancher de vitesse ramené à 1 m/s ; après correction 0 blocage sur 3 000 étapes, 0 coureur non arrivé sur 24 000.
+- **Panneau « Pourquoi ? »** : section « les autres, d'après ce que je vois » (position, disposition, état, danger).
+- **Docs** : `v0.0.1-design-fonctionnel.md` §6 mis à jour (7 intentions, raisons du code, perception limitée, critères), références périmées corrigées.
+- **Électron** : archive Windows (`npm run dist:zip`) construite depuis Linux, application Linux packagée démarrée ; version d'Electron fixée pour `electron-builder`. L'installeur NSIS reste à construire sous Windows.
+- Écarts connus : sprinteurs sous le hasard (21 / 12 / 8 %), rouleurs forts en montagne (31 %). Tests : 87 → 88.
+
 ## v0.0.7 — fatigue aiguë, durabilité, mental, équilibrage
 - **Fatigue aiguë** : monte au-dessus du plancher, redescend dessous ; raisons « mes jambes chargent » / « reposées » : la durée d'un tour de relais émerge (changements de tête 60 → 96 par course). Inactive en côte.
 - **Durabilité recalée par mesure** : constat qu'elle n'avait aucun effet en étape (capacité plate tant que `E` > 0,4) ; usure de fond progressive en étape ; `durabilitePct` mesurée sur le modèle (plus de table), seuils recalés.

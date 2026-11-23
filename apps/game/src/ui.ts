@@ -100,6 +100,11 @@ export function updateTrace(w: World, id: number) {
   const why = d.raisons.map((q) => `<div class="why"><span class="v ${q.valeur >= 0 ? 'p' : 'n'}">${q.valeur >= 0 ? '+' : '−'}${Math.abs(q.valeur).toFixed(1)}</span><span class="t">${q.texte}<div class="bar ${q.valeur >= 0 ? 'p' : 'n'}" style="width:${Math.round((Math.abs(q.valeur) / max) * 100)}%"></div></span></div>`).join('') || '<div class="muted">aucune raison marquante</div>';
   const ev = resumeEvaluations(d.evaluations);
   const alt = ev.map((e) => `<div class="alt ${e.vetos.length ? 'veto' : ''}"><span class="chip" style="--c:${INTENT_COLOR[e.intention]}">${e.label}</span><span>${e.vetos.length ? 'impossible : ' + e.vetos[0] : e.raisons.slice().sort((a, b) => Math.abs(b.valeur) - Math.abs(a.valeur)).slice(0, 2).map((q) => `${q.valeur >= 0 ? '+' : '−'}${Math.abs(q.valeur).toFixed(1)} ${q.texte.toLowerCase()}`).join(' ; ') || '—'}</span><span class="sc">${e.vetos.length ? '✕' : e.score.toFixed(1)}</span></div>`).join('');
+  const DISPO = { rouleur: 'roule souvent devant', suiveur: 'reste à l\'abri', inconnu: 'pas encore cerné' } as const;
+  const ETAT = { frais: 'a l\'air frais', marque: 'est marqué', about: 'est à bout' } as const;
+  const autres = it.autres.length
+    ? it.autres.slice().sort((x, y) => Math.abs(x.dx) - Math.abs(y.dx)).map((q) => `<div class="muted"><b>${q.letter}</b> ${q.dx >= 0 ? 'à ' + Math.round(q.dx) + ' m devant' : 'à ' + Math.round(-q.dx) + ' m derrière'} · ${DISPO[q.disposition]} · ${ETAT[q.etat]}${q.danger > 0.4 ? ' · <b>dangereux</b> (accélère fort)' : ''}</div>`).join('')
+    : '<div class="muted">Personne en vue.</div>';
   const sprint = r.intent.sprint ? ' (sprint)' : '';
   el.innerHTML = `
     <h2><span>Pourquoi ?</span><span class="muted">décision de ${fmtT(d.t)} · ${d.declencheur}</span></h2>
@@ -108,6 +113,7 @@ export function updateTrace(w: World, id: number) {
     <div class="sec"><b>Perçu</b><div class="pills">${pills.map((t) => `<span>${t}</span>`).join('')}</div>
       <div class="muted">Réel : réserve ${Math.round(d.reel.reserve * 100)} % — le coureur la ressent à ${Math.round(p.moi.reserve * 100)} % (approximatif).</div></div>
     <div class="sec"><b>Interprété</b>${cap(it.phrases.join(', '))}.</div>
+    <div class="sec"><b>Les autres, d'après ce que je vois</b>${autres}</div>
     <div class="sec"><b>Intention</b><span class="chip" style="--c:${INTENT_COLOR[d.intention]}">${INTENTION_LABEL[d.intention]}${sprint}</span>
       <span class="muted"> engagée jusqu'à ${d.engagementJusqua === Infinity ? 'la ligne' : fmtT(d.engagementJusqua)}</span>
       <div class="muted">${limitesTexte(r)}</div>${why}</div>

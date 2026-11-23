@@ -1,7 +1,7 @@
 {
   "name": "pedale",
   "private": true,
-  "version": "0.0.7",
+  "version": "0.1.0",
   "description": "Pédale — jeu de cyclisme sur route, vue de dessus, un seul coureur dans le peloton",
   "workspaces": [
     "packages/*",
@@ -18,7 +18,8 @@
     "dist": "npm run dist -w @pedale/game",
     "parcours": "npm run parcours -w @pedale/batch --",
     "atelier": "npm run dev -w @pedale/atelier",
-    "etapes": "npm run etapes -w @pedale/batch --"
+    "etapes": "npm run etapes -w @pedale/batch --",
+    "dist:zip": "npm run dist:zip -w @pedale/game"
   },
   "engines": {
     "node": ">=20"

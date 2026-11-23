@@ -14,7 +14,7 @@ const SIM_DT = 0.25;
 const TAU = Math.PI * 2;
 const qs = new URLSearchParams(location.search);
 let seed = Number(qs.get('seed') ?? 20260);
-// décor : « auto » suit le type d'étape (docs/v0.0.7-menu.md §2) ; ?biome=desert l'impose
+// décor : « auto » suit le type d'étape (docs/v0.1.0-menu.md §2) ; ?biome=desert l'impose
 let decor: ChoixDecor = (BIOME_KEYS as string[]).includes(qs.get('biome') ?? '') ? (qs.get('biome') as BiomeKey) : 'auto';
 let biome: BiomeKey = decor === 'auto' ? 'prairie' : decor;
 let ventMode: 'fixe' | 'face' = qs.get('vent') === 'face' ? 'face' : 'fixe';
@@ -80,7 +80,7 @@ function newWorld(s: number) {
   const parcours = genererChoix({ type: etape ?? 'poc', km: kmEtape, finale, seed, decor });
   W = creerMonde({ seed, trace: 'changements', ventMode, route, ...(parcours ? { parcours } : {}) });
   document.body.classList.toggle('etape', !!etape);
-  document.getElementById('hTitre')!.textContent = etape ? `Pédale · v0.0.7 · huit coureurs, étape ${LIBELLE_TYPE[etape].toLowerCase()} de ${kmEtape} km` : 'Pédale · v0.0.7 · huit coureurs sur le plat';
+  document.getElementById('hTitre')!.textContent = etape ? `Pédale · v0.1.0 · huit coureurs, étape ${LIBELLE_TYPE[etape].toLowerCase()} de ${kmEtape} km` : 'Pédale · v0.1.0 · huit coureurs sur le plat';
   scenery = new Scenery(W.road, { seed, biome, finishS: W.finishX });
   prev = W.riders.map((r) => ({ x: r.x, y: r.y })); acc = 0; eventPtr = 0; ended = false; hideEnd();
   document.getElementById('feed')!.innerHTML = '';

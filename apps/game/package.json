@@ -1,6 +1,6 @@
 {
   "name": "@pedale/game",
-  "version": "0.0.7",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Pédale — client de jeu (rendu PixiJS + interface HTML, empaqueté avec Electron pour Steam)",
@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
     "electron": "vite build && electron .",
-    "dist": "vite build && electron-builder --win --x64"
+    "dist": "vite build && electron-builder --win --x64",
+    "dist:zip": "vite build && electron-builder --win zip --x64"
   },
   "dependencies": {
     "@pedale/sim": "*",
@@ -44,6 +45,15 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "electronVersion": "37.10.3",
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "executableName": "pedale",
+      "category": "Game"
     }
-  }
+  },
+  "author": "Pédale"
 }

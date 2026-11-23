@@ -1,6 +1,6 @@
 {
   "name": "@pedale/parcours",
-  "version": "0.0.7",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Pédale — génération et évaluation de parcours (profil altimétrique, tracé en plan). Module pur, indépendant de la simulation.",

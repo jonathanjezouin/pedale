@@ -157,6 +157,10 @@ function decisions(w: World) {
 }
 
 /* ------------------------ physique ------------------------ */
+/** Vitesse plancher (m/s) dans P/v : à l'arrêt la force de traction est limitée (P/v diverge), mais pas à P/2 m/s : sur une rampe à 14 %, 200 W
+ *  donnaient 100 N, juste la résistance, et huit coureurs restaient immobiles pour toujours (validation v0.1.0, étapes de montagne > 225 km). */
+const V_PLANCHER_PUISSANCE = 1;
+
 function physique(w: World) {
   const dt = w.cfg.dt;
   const act = w.vue.ordre;
@@ -170,7 +174,7 @@ function physique(w: World) {
     const pRaw = aLaLimite ? Math.min(0, clamp(c.p, pFrein, capExplosif(r))) : clamp(c.p, pFrein, capExplosif(r));     // < 0 : freinage
     const p = Math.max(0, pRaw);
     // bilan de forces : m·a = P/v − F
-    const acc = (pRaw / Math.max(r.v, 2) - resistance(r.v, r.draft, r)) / r.profile.mass;
+    const acc = (pRaw / Math.max(r.v, V_PLANCHER_PUISSANCE) - resistance(r.v, r.draft, r)) / r.profile.mass;
     r.v = Math.max(0, r.v + acc * dt);
     if (r.v > vLim) r.v = Math.max(vLim, r.v - FREINAGE_MAX * dt);          // la limite de vitesse se tient en freinant
     // vitesse sol → avancement le long de la ligne centrale : à l'intérieur d'un virage on parcourt moins de distance
