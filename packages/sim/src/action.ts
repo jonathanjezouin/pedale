@@ -85,7 +85,7 @@ function suivre(w: World, roue: Rider, r: Rider, aMax = 1.2): number {
   let acc = clamp(corr, -2, VITESSE_RAPPROCHEMENT * kv) + kv * (vAnticipee - v);
   // évitement du contact : seulement si je suis vraiment derrière lui (recouvrement latéral) ; un coureur à ma hauteur n'est pas une roue (v0.1.2b : le freinage à fond sur un coureur
   // « quasi à côté » faisait perdre 6 km/h en 2 s, d'où des pertes de roue en cascade)
-  if (gapP < 0.25 && gapP > -RIDER_LEN && Math.abs(roue.y - r.y) < 0.7) acc -= Math.min(2, 2 * (0.25 - gapP));
+  if (gapP < 0.45 && gapP > -RIDER_LEN && Math.abs(roue.y - r.y) < 0.7) acc -= Math.min(2.5, 3 * (0.45 - gapP));
   // l'abri a de la valeur : pour reprendre la roue on accepte de dépasser un peu l'effort soutenable, jusqu'à `effortMax` ; sans aspiration, rien ne justifie de forcer
   const valeurAbri = clamp(aspirationValeur(ex.ecartConfort, 0) / 0.3, 0, 1);
   const urgence = valeurAbri * clamp((gapP - sCible - demi) / 2.5, 0, 1);

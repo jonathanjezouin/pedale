@@ -21,7 +21,6 @@ import { bruitDe, dangerSuppose, dispositionDe, gauss } from './observation';
 export const TUNE = {
   hysteresis: 0.6,            // un coureur ne change d'avis que si l'écart de score dépasse ça
   intervalleBase: 7,          // s entre deux réévaluations (réduit par l'expérience)
-  dureeTour: 45,              // s en tête au bout desquelles l'envie de quitter la tête devient forte
   seuilQuitter: 3.5,          // somme des raisons de quitter la tête au-delà de laquelle je m'écarte
   envieRouler: 2.5,           // poids de « le groupe va moins vite que ce que je peux tenir »
 };
@@ -128,8 +127,8 @@ export function contrat(r: Rider, p: Percu, ip: Interprete, k: Intention, ctx: C
         const rq: Raison[] = [];
         const q = (id: string, texte: string, valeur: number) => { if (Math.abs(valeur) >= 0.05) rq.push({ id, texte, valeur }); };
         // un « tour » ne compte que si je roule vraiment : à l'arrêt ou au ralenti, rester devant ne m'use pas
-        q('duree', "J'ai fait mon tour en tête", 4 * clamp(p.moi.tempsEnTete / TUNE.dureeTour, 0, 1.2) * smoothstep(0.6, 0.85, p.moi.effortRessenti));
-        q('rasLeBol', 'Je suis presque le seul à rouler depuis longtemps', 4.5 * ip.rasLeBol);
+        // je cède la tête quand mes jambes chargent (fatigue aiguë), pas au bout d'une durée fixe ni pour « rendre » ce que j'ai roulé (v0.1.2c)
+        q('aigue', 'Mes jambes chargent : j\'ai fait mon tour en tête', 4.5 * clamp((p.moi.aigue - (prof.fatigueRelais - 0.15)) / 0.3, 0, 1.3) * (ip.terrain === 'montee' ? 0 : 1));
         q('reserve', 'Ma réserve est basse', 3 * ip.reserveBasse);
         q('user', `Je veux continuer à user ${ip.dangerLetter ?? 'mon rival'}`, -2 * user);
         // je me replace derrière le dernier qui roule (« inconnu » compte comme relayeur tant qu'il n'a pas montré le contraire) ; s'il n'y en a pas, je reste devant
@@ -141,7 +140,8 @@ export function contrat(r: Rider, p: Percu, ip: Interprete, k: Intention, ctx: C
         const ecart = vVoulue - p.rivaux.allure;
         // je n'engage pas le dépassement si je vois quelqu'un manœuvrer devant moi (il passe, ou il se laisse glisser)
         const manoeuvre = p.rivaux.vus.some((q) => !q.enLigne && q.dx > -3 && q.dx < 25);
-        if (ecart > 0.5 && p.rivaux.tendanceAllure <= 0.2 && !manoeuvre) {
+        // celui qui prend la tête est l'un des premiers de la file (je ne passe pas devant tout le monde) et ses jambes sont fraîches
+        if (ecart > 0.5 && p.rivaux.tendanceAllure <= 0.2 && !manoeuvre && p.moi.rangDansGroupe <= 2 && (ip.terrain === 'montee' || p.moi.aigue < prof.fatigueRelais - 0.2)) {
           place = 'tete';
           raisonsPlace.push({ id: 'rythme', texte: `Le groupe va à ${(p.rivaux.allure * 3.6).toFixed(0)} km/h, je veux rouler à ${(vVoulue * 3.6).toFixed(0)} km/h`, valeur: clamp(ecart, 0, 3) });
         }
@@ -230,7 +230,7 @@ export function percevoir(w: World, r: Rider): { percu: Percu; reel: Reel } {
       pente: r.pente * 100, penteDevant: ((w.road.alt(r.x + 400) - w.road.alt(r.x)) / 400) * 100, profil: profilRestant(w, r.x),
     },
     role: { objectif: 'gagner' },
-    profil: { endurance: r.profile.tEnd, pointe: r.profile.pointe, agressivite: r.profile.agressivite, experience: r.profile.experience },
+    profil: { endurance: r.profile.tEnd, pointe: r.profile.pointe, agressivite: r.profile.agressivite, experience: r.profile.experience, fatigueRelais: r.profile.fatigueRelais },
   };
   const reel: Reel = { reserve: r.E, explosivite: r.X, ecartDevant: r.ecartDevant };
   return { percu, reel };
@@ -271,13 +271,6 @@ export function interpreter(r: Rider, p: Percu): Interprete {
   const derriere = p.rivaux.vus.filter((q) => q.dx < 0).map((q) => -q.dx);
   const avanceSurVus = derriere.length ? Math.min(...derriere) : 25;
 
-  // qui a roulé : ce que je me souviens avoir vu des autres, comparé à mon propre temps de tête
-  const mine = p.moi.leadRecent;
-  const tetes = Object.values(r.memoire).filter((s) => s.vu >= 10).map((s) => s.tete);
-  const moy = tetes.length ? tetes.reduce((s, v) => s + v, 0) / tetes.length : mine;
-  const excesRelais = clamp((mine - moy) / Math.max(25, mine), 0, 1);
-  const sumAll = mine + tetes.reduce((s, v) => s + v, 0);
-  const rasLeBol = sumAll >= 90 ? clamp((mine / sumAll - 0.45) / 0.4, 0, 1) : 0;
   const sprintFocus = clamp((p.profil.pointe - 0.45) / 0.4, 0, 1);
   // mon plancher du moment, et ce que me coûterait de tenir l'allure du groupe en tête (exposé) : la question « puis-je rouler sans me cramer ? »
   const plancher = PLANCHER * capf(p.moi.reserve) * facteurFond(r.usure, p.moi.reserve);
@@ -314,7 +307,6 @@ export function interpreter(r: Rider, p: Percu): Interprete {
   const phrases: string[] = [];
   phrases.push(forme === 'frais' ? 'je me sens frais' : forme === 'bien' ? 'je me sens bien' : forme === 'limite' ? 'je suis à la limite' : 'je suis cuit');
   if (explosivite === 'vide') phrases.push("je n'ai plus d'explosivité");
-  if (excesRelais > 0.25) phrases.push("j'ai plus roulé que ce que j'ai vu des autres");
   if (p.moi.groupeTaille > 1) phrases.push(`je suis dans un groupe de ${p.moi.groupeTaille}${rythme === 'baisse' ? ', l\'allure baisse' : rythme === 'monte' ? ', l\'allure monte' : ''}`);
   if (!p.moi.estEnTete && p.moi.effortRessenti > plancher + 0.03) phrases.push(`je suis à la peine (${Math.round(p.moi.effortRessenti * 100)} % du FTP, au-dessus de mon plancher de ${Math.round(plancher * 100)} %)`);
   if (p.moi.estEnTete) phrases.push(effortRequis <= plancher + 0.05 ? `tenir cette allure en tête me coûte ${Math.round(effortRequis * 100)} % du FTP : dans mon plancher` : `tenir cette allure en tête me coûterait ${Math.round(effortRequis * 100)} % du FTP, au-dessus de mon plancher de ${Math.round(plancher * 100)} %`);
@@ -334,7 +326,7 @@ export function interpreter(r: Rider, p: Percu): Interprete {
     forme, explosivite, distance, position, placement: p.moi.abrite > 0.12 ? 'abrite' : 'expose',
     reserveBasse: clamp((0.45 - E) / 0.35, 0, 1), explosiviteBasse: clamp((0.6 - X) / 0.4, 0, 1),
     aigue: p.moi.aigue, abriPerdu, retourFaisable,
-    excesRelais, rasLeBol, sprintFocus, autres, groupe: { taille: p.moi.groupeTaille, rythme, cohesion },
+    sprintFocus, autres, groupe: { taille: p.moi.groupeTaille, rythme, cohesion },
     terrain, colEnCours, colDevant, budget, plancher, effortRequis, inconfort: !p.moi.estEnTete && p.moi.effortRessenti > plancher + 0.03,
     inconfortEnTete: p.moi.estEnTete && effortRequis > plancher + 0.05,
     dangerMax, dangerLetter, fractionFrais, avanceSurVus, phrases,
@@ -368,9 +360,8 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         // garder des forces pour la fin n'a plus de sens quand la fin est là
         mk(raisons, 'forces', 'Je veux garder des forces pour la fin', (1.5 + 1.5 * it.sprintFocus) * smoothstep(500, 2500, d));
         mk(raisons, 'reserve', 'Ma réserve est basse', 4 * it.reserveBasse);
-        mk(raisons, 'dejaRoule', "J'ai déjà roulé plus que ce que j'ai vu des autres", 2.5 * it.excesRelais);
         mk(raisons, 'budget', "Ma réserve ne suffira pas pour le reste de l'étape : j'économise", 3 * budgetBas);
-        mk(raisons, 'aigue', 'Mes jambes chargent : je lève le pied pour récupérer', AIGUE_RAISON * clamp((it.aigue - 0.3) / 0.4, 0, 1) * (it.terrain === 'montee' ? 0 : 1));
+        mk(raisons, 'aigue', 'Mes jambes chargent : je lève le pied pour récupérer', AIGUE_RAISON * clamp((it.aigue - (prof.fatigueRelais - 0.2)) / 0.3, 0, 1) * (it.terrain === 'montee' ? 0 : 1));
         if (enTete) {
           mk(raisons, 'reculer', 'Je suis devant : pour m\'abriter il faut que je recule', -0.5);
           mk(raisons, 'inconfort', `Mener à cette allure me coûterait ${Math.round(it.effortRequis * 100)} % du FTP, au-dessus de mon plancher de ${Math.round(it.plancher * 100)} %`, 3.0 * clamp((it.effortRequis - it.plancher) / 0.1, 0, 1));
@@ -408,9 +399,8 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
           mk(raisons, 'rythme', `Le groupe va à ${(allure * 3.6).toFixed(0)} km/h, je peux tenir ${(vVoulue * 3.6).toFixed(0)} km/h sans me cramer : je ne laisse pas la course s'endormir`, TUNE.envieRouler * clamp((vVoulue - allure) / 1.5, 0, 1) * (1 - it.reserveBasse));
         }
         mk(raisons, 'reserve', 'Ma réserve est basse', -4.5 * it.reserveBasse);
-        mk(raisons, 'rasLeBol', "Je suis presque le seul à rouler depuis longtemps", -4.5 * it.rasLeBol);
         mk(raisons, 'budget', "Ma réserve ne suffira pas pour le reste de l'étape", -3 * budgetBas);
-        mk(raisons, 'aigue', 'Mes jambes chargent', -AIGUE_RAISON * clamp((it.aigue - 0.3) / 0.4, 0, 1) * (it.terrain === 'montee' ? 0 : 1));
+        mk(raisons, 'aigue', 'Mes jambes chargent', -AIGUE_RAISON * clamp((it.aigue - (prof.fatigueRelais - 0.2)) / 0.3, 0, 1) * (it.terrain === 'montee' ? 0 : 1));
         mk(raisons, 'repose', 'Mes jambes sont reposées : je peux repasser devant', 1.0 * clamp((0.15 - it.aigue) / 0.15, 0, 1) * (1 - it.reserveBasse));
         break;
       }

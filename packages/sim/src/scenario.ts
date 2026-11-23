@@ -55,7 +55,7 @@ function creerProfil(arch: Archetype, r: () => number): Profile {
     ftp: j(b.ftp, 0.04) * (mass - VELO_KG), wPrime: j(b.wPrime, 0.08), pPeak: j(b.pPeak, 0.05), tEnd: j(b.tEnd, 0.10),
     mass, cda: range(r, ...(b.cda ?? [0.30, 0.34])),
     agressivite: clamp(b.agressivite + (r() - 0.5) * 0.2, 0, 1),
-    experience: range(r, 0.3, 0.9), sens: 0.6, sangFroid: 0.6,
+    experience: range(r, 0.3, 0.9), sens: 0.6, sangFroid: 0.6, fatigueRelais: 0.6,
     lateral: range(r, -0.3, 0.3),
     pointe: 0,
     objectif: 'gagner',
@@ -81,6 +81,7 @@ export function creerMonde(partiel: Partial<Config> & { seed: number }): World {
     // sens de la course et sang-froid : flux propre, pour ne pas décaler les tirages existants (docs/v0.0.7-fatigue.md §3)
     const rm = mulberry32(((cfg.seed * 7919 + (i + 1) * 104729) ^ 0x5e45) | 0);
     profile.sens = clamp(range(rm, 0.3, 0.9) + (arch === 'opportuniste' || arch === 'rouleur' ? 0.08 : 0), 0, 1); profile.sangFroid = range(rm, 0.3, 0.9);
+    profile.fatigueRelais = clamp(0.40 + 0.35 * (profile.tEnd - 2400) / 1200 + (rm() - 0.5) * 0.2, 0.35, 0.8);
     return {
       id: i, letter: String.fromCharCode(65 + i), archetype: arch, profile, aigue: 0,
       x: 0, y: 0, v: 0, p: 0, tSprint: 0, usure: etape ? USURE_ETAPE : USURE_FINALE,

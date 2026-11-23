@@ -1,6 +1,6 @@
 {
   "name": "@pedale/atelier",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Pédale — atelier de parcours : page de développement pour régler les fourchettes sans lancer de course",

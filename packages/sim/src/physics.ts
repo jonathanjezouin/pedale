@@ -29,7 +29,8 @@ export const capf = (E: number) => 0.62 + 0.38 * clamp(E / 0.4, 0, 1);
 export const DUR_PERTE = 0.06;
 export const facteurFond = (u: { legere: boolean }, E: number) => (u.legere ? 1 - DUR_PERTE * (1 - E) : 1);
 /** Fatigue aiguë F (0..1) : monte au-dessus du plancher, redescend en dessous ; baisse un peu la capacité soutenue. C'est elle qui fait la durée d'un tour de relais. */
-export const AIGUE = { montee: 0.085, descente: 0.012, effet: 0.03 };
+/** `seuil` : au-dessus, on se charge (mener à 87 % du FTP dans le vent charge ; rouler abrité à 55 % récupère) ; v0.1.2c : seuil 0,75 (avant : le plancher, 0,87, donc mener au plancher ne chargeait jamais). */
+export const AIGUE = { seuil: 0.75, montee: 0.05, descente: 0.02, effet: 0.03 };
 
 export const capSoutenu = (r: Rider) => r.profile.ftp * capf(r.E) * facteurFond(r.usure, r.E) * (1 - AIGUE.effet * r.aigue);
 
@@ -135,7 +136,7 @@ export function consommer(r: Rider, p: number, dt: number): void {
   const leger = r.usure.legere && ratio < PLANCHER ? Math.pow(ratio / PLANCHER, 3) : 1;
   r.E = clamp(r.E - (ratio * ratio * ratio * leger * dt) / (r.profile.tEnd * r.usure.echelle), 0, 1);
   // fatigue aiguë : monte au-dessus du plancher, redescend en dessous (plus vite qu'on ne l'a chargée n'est pas le cas : la récupération prend des minutes)
-  r.aigue = clamp(r.aigue + (ratio > PLANCHER ? AIGUE.montee * (ratio - PLANCHER) : -AIGUE.descente * (PLANCHER - ratio)) * dt, 0, 1);
+  r.aigue = clamp(r.aigue + (ratio > AIGUE.seuil ? AIGUE.montee * (ratio - AIGUE.seuil) : -AIGUE.descente * (AIGUE.seuil - ratio)) * dt, 0, 1);
   if (p > ftp) {
     r.X = clamp(r.X - ((p - ftp) * dt) / r.profile.wPrime, 0, 1);
   } else {

@@ -1,7 +1,18 @@
 # Journal des versions
 
-## v0.1.2 — comportement de groupe (en cours ; numéros de version passés à la fin de la v0.1.2d)
+## v0.1.2 — comportement de groupe
 Conception : `docs/v0.1.2-groupe.md`. Banc d'essai : `npm run groupe`.
+### v0.1.2c — relais par règles individuelles
+- **Fatigue aiguë recalée** : seuil 0,75 × FTP, montée 0,05, descente 0,02 ; seuil personnel de relais `fatigueRelais` (0,35-0,8). Retirés : durée de tour fixe (45 s), `rasLeBol`, `excesRelais`, `dejaRoule`. Ajoutés : « mes jambes chargent : j'ai fait mon tour » pour céder la tête ; prise de tête réservée aux deux premiers de la file, jambes fraîches (sauf en côte).
+- **Hypothèse infirmée** : sans fatigue aiguë les tours ne s'allongent pas, ils raccourcissent (tout le monde veut mener) ; elle régularise le relais.
+- Banc (8 coureurs, fixe / face) : durée médiane d'un tour 108 / 85 s ; tours < 10 s 5 / 2 % ; abri hors tête 33 / 37 % ; sous 10 % d'abri 13 / 6 % ; pertes de roue 14 / 15 ; part du temps en tête 50 % / 0 % (inégal). Étapes (30 × 100 km) : sprinteurs 40 / 17 / 3 %, grimpeurs 10 / 37 / 60 %.
+- Tests : 94 → 98 (4 nouveaux) ; deux seuils ajustés (« aspiration à zéro » : la dispersion sans abri est moindre, le nombre de groupes ne distingue plus les deux cas).
+
+### v0.1.2d — consolidation (v0.1.2 terminée)
+- **Revalidation de 900 étapes** (300 par type, 20 à 250 km) : aucune neutralisée, aucune non terminée, 0 valeur non finie, 0 coureur non arrivé sur 7 200. Décrochages par étape : 19 / 43 / 56 (v0.1.0 : 120 / 183 / 210). Victoires : sprinteurs 21 / 10 / 2 % (21 / 12 / 8), grimpeurs 20 / 42 / 61 % (17 / 34 / 46). Vitesses 38,6 / 35,3 / 31,0 km/h.
+- **Écarts** : cibles du banc non atteintes sur les pertes de roue, l'inégalité des relais, la longueur du groupe et les frôlements ; détail et pistes dans `docs/v0.1.2-groupe.md` §9.1. Grimpeurs plus forts en montagne, sprinteurs presque absents en montagne (2 %) : plausible en cyclisme mais à surveiller.
+- Numéros de version passés à 0.1.2.
+
 ### v0.1.2b — agir et suivre
 - **Régulateur de suivi** : écart visé en secondes (écart de confort + 0,045 s de roue à roue), bande morte, amortissement (gain faible dans la bande, plus fort au-delà), vitesse de rapprochement bornée à 1,2 m/s, évitement du contact bruité par l'exécution. À lui seul, effet quasi nul.
 - **Quatre causes structurelles** trouvées au banc : axe de file global (un groupe scindé n'avait plus de roue à suivre), « sans roue on tient la vitesse médiane de la course », freinage à fond sur un coureur à ma hauteur (−6 km/h en 2 s), perdre l'abri sans conséquence dans Vouloir. Corrigées : file par groupe, rejoindre le coureur devant, évitement limité au recouvrement latéral, `abriPerdu` / `retourFaisable` / survie / abandon explicite. Détail : `docs/v0.1.2-groupe.md` §5.1.

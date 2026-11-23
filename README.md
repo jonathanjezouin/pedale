@@ -14,7 +14,7 @@ Jeu de cyclisme sur route, vue 100 % de dessus. On incarne un seul coureur, de l
 - **Plan de développement jusqu'à la v0.1.0** : [`docs/v0.1.0-plan.md`](docs/v0.1.0-plan.md)
 - POC graphique initial (HTML seul) : [`docs/poc-graphique/`](docs/poc-graphique/index.html)
 
-## v0.1.1 — huit coureurs, une étape au choix (menu de parcours) ; raisonnement individuel ; module de parcours
+## v0.1.2 — huit coureurs, une étape au choix (menu de parcours) ; raisonnement individuel ; module de parcours
 
 Huit coureurs qui s'affrontent, chacun pour soi, sur une route qui tourne avec un vent fixe (pas de peloton poursuivant ; des groupes se forment, c'est tout). Chaque coureur
 raisonne par étages — **percevoir → interpréter → vouloir → agir** — avec 7 intentions (s'abriter, se placer, participer, attaquer, suivre, revenir, gérer) et des raisons nommées ; il ne connaît pas les autres, il les déduit de ce qu'il voit.
@@ -31,6 +31,7 @@ npm run atelier      # atelier de parcours : http://localhost:5174  (?km=150&typ
 npm run parcours -- --n 1000   # validation du générateur de parcours : 1 000 étapes par type
 npm run etapes -- --n 30 --km 100   # 30 étapes courues par type : durées, étirement en côte, abri, vainqueurs par profil et par type physique
 npm run validation -w @pedale/batch -- --worker --type montagne --n 20 --out /tmp/v.json   # validation v0.1.0 (puis --agg /tmp/v.json) ; docs/v0.1.0-validation.md
+npm run groupe       # banc d'essai de groupe (4 et 8 coureurs, plat) : relais, pertes de roue, abri, longueur ; docs/v0.1.2-groupe.md
 npm run batch -- --n 500    # 500 courses sans affichage + critères de réussite (§6.6) ; --vent face --route droite pour l'ancien mode
 npm run build        # build web (apps/game/dist)
 npm run electron     # build + fenêtre Electron

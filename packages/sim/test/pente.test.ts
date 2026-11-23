@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { genererParcours } from '@pedale/parcours';
 import {
-  A_LAT, COMPOSITION_ETAPE, bruitAutres, bruitDe, capSoutenu, durabilitePct, FREINAGE_DESCENTE, PLANCHER, PROLONGEMENT_AVANT, REF_APTITUDES, ROAD_DS, TYPES_PHYSIQUES, USURE_ETAPE, USURE_FINALE, V_DROITE,
+  A_LAT, AIGUE, COMPOSITION_ETAPE, bruitAutres, bruitDe, capSoutenu, durabilitePct, FREINAGE_DESCENTE, PLANCHER, PROLONGEMENT_AVANT, REF_APTITUDES, ROAD_DS, TYPES_PHYSIQUES, USURE_ETAPE, USURE_FINALE, V_DROITE,
   aptitudes, consommer, creerMonde, creerRoute, creerRouteDepuisParcours, forcePenteRoulement, interpreter, pas, percevoir, resistance, simuler, typePhysique, vitesseSolo,
 } from '../src/index';
 
@@ -260,9 +260,11 @@ describe('v0.0.7 : fatigue aiguë, durabilité, sens de la course et sang-froid'
     for (let i = 0; i < 3000; i++) consommer(r, 1.2 * r.profile.ftp, 1);
     expect(r.aigue).toBe(1);
   });
-  it('rester au plancher ne charge pas les jambes', () => {
-    const r = mk(); for (let i = 0; i < 600; i++) consommer(r, PLANCHER * r.profile.ftp, 1);
+  it('rester sous le seuil aigu (0,75 × FTP) ne charge pas les jambes ; mener au plancher (0,87) les charge, lentement', () => {
+    const r = mk(); for (let i = 0; i < 600; i++) consommer(r, AIGUE.seuil * r.profile.ftp, 1);
     expect(r.aigue).toBeLessThan(0.01);
+    for (let i = 0; i < 90; i++) consommer(r, PLANCHER * r.profile.ftp, 1);
+    expect(r.aigue).toBeGreaterThan(0.2); expect(r.aigue).toBeLessThan(0.8);
   });
   it('la fatigue aiguë et l\'usure baissent un peu la capacité soutenue, seulement en étape pour l\'usure', () => {
     const r = mk(); const c0 = capSoutenu(r);
@@ -316,7 +318,7 @@ describe('v0.1.1 : un suiveur colle à la roue qu\'il suit', () => {
     expect(aMax).toBeGreaterThan(0.05);      // quelqu'un voit bien une roue accélérer
     expect(aMax).toBeLessThan(4); expect(aMin).toBeGreaterThan(-4);
   }, 60000);
-  it('les écarts à la roue suivie : médiane sous 1 m, et moins de 19 % du temps au-delà de 3,5 m (20,4 % avant la v0.1.1)', () => {
+  it('les écarts à la roue suivie : médiane sous 1,5 m, et moins de 19 % du temps au-delà de 3,5 m (20,4 % avant la v0.1.1)', () => {
     const gaps: number[] = [];
     for (const seed of [1, 2, 3, 4]) {
       const w = creerMonde({ seed });
@@ -331,7 +333,61 @@ describe('v0.1.1 : un suiveur colle à la roue qu\'il suit', () => {
     }
     gaps.sort((a, b) => a - b);
     expect(gaps.length).toBeGreaterThan(20000);
-    expect(gaps[Math.floor(gaps.length / 2)]!).toBeLessThan(1);
+    expect(gaps[Math.floor(gaps.length / 2)]!).toBeLessThan(1.5);      // écart visé ≈ 1 m (écart de confort + temps de roue à roue) + freinage de contact sous 0,45 m (v0.1.2b)
     expect(gaps.filter((g) => g > 3.5).length / gaps.length).toBeLessThan(0.19);
   }, 120000);
+});
+
+describe('v0.1.2c : des relais qui émergent de règles individuelles', () => {
+  const ARCH4 = ['rouleur', 'sprinteur', 'attaquant', 'opportuniste'] as const;
+  /** Durées des tours en tête (le coureur le plus en avant, changement compté s'il garde l'avant 3 s). */
+  const tours = (seeds: number[], dur = 900) => {
+    const out: number[] = [];
+    for (const seed of seeds) {
+      const w = creerMonde({ seed, nbCoureurs: 4, composition: [...ARCH4] });
+      let lead = -1, since = 0, cand = -1, candT = 0;
+      while (w.result.statut !== 'termine' && w.t < dur) {
+        pas(w);
+        const act = w.riders.filter((r) => r.status === 'course'); const f = act.reduce((a, b) => (b.x > a.x ? b : a));
+        if (lead < 0) { lead = f.id; since = w.t; }
+        else if (f.id !== lead && f.x - w.riders[lead]!.x >= 0.5) { if (cand !== f.id) { cand = f.id; candT = w.t; } if (w.t - candT >= 3) { out.push(w.t - since); lead = cand; since = w.t; cand = -1; } }
+        else cand = -1;
+      }
+    }
+    return out.sort((a, b) => a - b);
+  };
+  const med = (a: number[]) => a[Math.floor(a.length / 2)]!;
+  it('plus de comptabilité d\'équité ni de durée de tour fixe : aucune de ces raisons n\'apparaît dans les décisions', () => {
+    const interdits = ['dejaRoule', 'rasLeBol', 'duree'], vus = new Set<string>();
+    const w = creerMonde({ seed: 4 });
+    for (let i = 0; i < 1500; i++) { pas(w); for (const r of w.riders) { const d = r.last; if (d) for (const q of d.raisons) vus.add(q.id); if (d) for (const e of d.evaluations) for (const q of e.raisons) vus.add(q.id); } }
+    for (const k of interdits) expect(vus.has(k)).toBe(false);
+    expect(Object.keys(w.riders[0]!.last!.interprete)).not.toContain('excesRelais');
+  }, 60000);
+  it('la fatigue aiguë fait passer le relais : celui qui cède la tête est plus chargé que celui qui la prend', () => {
+    const ecarts: number[] = [];
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const w = creerMonde({ seed, nbCoureurs: 4, composition: [...ARCH4] });
+      let lead = -1, cand = -1, candT = 0, fLead = 0;
+      while (w.result.statut !== 'termine' && w.t < 900) {
+        pas(w);
+        const act = w.riders.filter((r) => r.status === 'course'); const f = act.reduce((a, b) => (b.x > a.x ? b : a));
+        if (lead < 0) { lead = f.id; continue; }
+        if (f.id !== lead && f.x - w.riders[lead]!.x >= 0.5) { if (cand !== f.id) { cand = f.id; candT = w.t; fLead = w.riders[lead]!.aigue; } if (w.t - candT >= 3) { ecarts.push(fLead - w.riders[f.id]!.aigue); lead = f.id; cand = -1; } }
+        else cand = -1;
+      }
+    }
+    expect(ecarts.length).toBeGreaterThan(30);
+    expect(ecarts.reduce((a, b) => a + b, 0) / ecarts.length).toBeGreaterThan(0.1);
+  }, 120000);
+  it('un tour dure de l\'ordre d\'une minute, pas de quelques secondes : médiane entre 30 et 150 s, moins de 15 % sous 10 s', () => {
+    const t = tours([7, 8, 9, 10, 11, 12]);
+    expect(med(t)).toBeGreaterThan(30); expect(med(t)).toBeLessThan(150);
+    expect(t.filter((x) => x < 10).length / t.length).toBeLessThan(0.15);
+  }, 120000);
+  it('les coureurs ont un seuil de fatigue de relais propre : il varie d\'un coureur à l\'autre et reste dans une plage plausible', () => {
+    const w = creerMonde({ seed: 3 }); const v = w.riders.map((r) => r.profile.fatigueRelais);
+    for (const x of v) { expect(x).toBeGreaterThanOrEqual(0.35); expect(x).toBeLessThanOrEqual(0.8); }
+    expect(new Set(v.map((x) => x.toFixed(3))).size).toBeGreaterThan(4);
+  });
 });

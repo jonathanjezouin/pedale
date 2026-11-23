@@ -14,7 +14,7 @@ const SIM_DT = 0.25;
 const TAU = Math.PI * 2;
 const qs = new URLSearchParams(location.search);
 let seed = Number(qs.get('seed') ?? 20260);
-// décor : « auto » suit le type d'étape (docs/v0.1.1-menu.md §2) ; ?biome=desert l'impose
+// décor : « auto » suit le type d'étape (docs/v0.1.2-menu.md §2) ; ?biome=desert l'impose
 let decor: ChoixDecor = (BIOME_KEYS as string[]).includes(qs.get('biome') ?? '') ? (qs.get('biome') as BiomeKey) : 'auto';
 let biome: BiomeKey = decor === 'auto' ? 'prairie' : decor;
 let ventMode: 'fixe' | 'face' = qs.get('vent') === 'face' ? 'face' : 'fixe';
@@ -60,7 +60,7 @@ function ensureTile(tx: number, ty: number): boolean {
 }
 
 /** Textures des coureurs : 8 coureurs × 4 postures × 12 phases, créées d'avance (quelques-unes par image) et envoyées au GPU avant d'en avoir besoin.
- *  Avant (v0.1.1) elles étaient dessinées à la première apparition d'une posture : un à-coup à chaque nouvelle posture. */
+ *  Avant (v0.1.2) elles étaient dessinées à la première apparition d'une posture : un à-coup à chaque nouvelle posture. */
 const warmLayer = new Container(); app.stage.addChild(warmLayer);
 const warmSprites: Sprite[] = [];
 let warmQueue: [number, number, number][] = [];
@@ -98,7 +98,7 @@ function newWorld(s: number) {
   const parcours = genererChoix({ type: etape ?? 'poc', km: kmEtape, finale, seed, decor });
   W = creerMonde({ seed, trace: 'changements', ventMode, route, ...(parcours ? { parcours } : {}) });
   document.body.classList.toggle('etape', !!etape);
-  document.getElementById('hTitre')!.textContent = etape ? `Pédale · v0.1.1 · huit coureurs, étape ${LIBELLE_TYPE[etape].toLowerCase()} de ${kmEtape} km` : 'Pédale · v0.1.1 · huit coureurs sur le plat';
+  document.getElementById('hTitre')!.textContent = etape ? `Pédale · v0.1.2 · huit coureurs, étape ${LIBELLE_TYPE[etape].toLowerCase()} de ${kmEtape} km` : 'Pédale · v0.1.2 · huit coureurs sur le plat';
   scenery = new Scenery(W.road, { seed, biome, finishS: W.finishX });
   prev = W.riders.map((r) => ({ x: r.x, y: r.y })); acc = 0; eventPtr = 0; ended = false; hideEnd();
   document.getElementById('feed')!.innerHTML = '';
@@ -211,7 +211,7 @@ app.ticker.add(() => {
   for (let ty = ty0; ty <= ty1; ty++) for (let tx2 = tx0; tx2 <= tx1; tx2++) { const d = Math.hypot((tx2 + 0.5) * TILE - cam.x, (ty + 0.5) * TILE - cam.y); if (d < R + TILE * 0.72) wanted.push([tx2, ty, d]); }
   wanted.sort((a, b) => a[2] - b[2]);
   for (const [tx2, ty2] of wanted) { if (budget <= 0) break; if (ensureTile(tx2, ty2)) budget--; }
-  // tuiles devant : le long de la route, jusqu'à ±42 m (la caméra tourne : l'écran déborde de la route), sur les ~100 m à venir ; une seule par image, et seulement si aucune tuile visible n'a été dessinée (v0.1.1 :
+  // tuiles devant : le long de la route, jusqu'à ±42 m (la caméra tourne : l'écran déborde de la route), sur les ~100 m à venir ; une seule par image, et seulement si aucune tuile visible n'a été dessinée (v0.1.2 :
   // le dessin d'une tuile coûte 8 à 18 ms, plus qu'une image ; il se faisait au dernier moment, en vue)
   const devant = new Set<string>();
   if (frames >= 4) {

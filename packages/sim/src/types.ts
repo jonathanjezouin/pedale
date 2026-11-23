@@ -49,6 +49,7 @@ export interface Profile {
   experience: number;   // 0..1 (réduit le bruit sur soi et les défauts d'exécution)
   sens: number;         // 0..1 sens de la course : qualité de la lecture des autres (positions, vitesses, intentions)
   sangFroid: number;    // 0..1 : le bruit ne monte pas quand on est sous pression (fatigue, décroché, sprint)
+  fatigueRelais: number;   // 0..1 : fatigue aiguë à laquelle j'estime avoir fait mon tour en tête (v0.1.2c) ; un rouleur d'endurance la place plus haut
   // dérivé
   pointe: number;       // 0..1, pointe de vitesse normalisée
   lateral: number;      // habitude de placement : décalage latéral personnel dans la file (m)
@@ -219,7 +220,7 @@ export interface Percu {
     profil: EvaluationParcours | null;  // ce qu'il reste de l'étape lu sur le profil (rafraîchi par km) ; null hors étape
   };
   role: { objectif: 'gagner' };
-  profil: { endurance: number; pointe: number; agressivite: number; experience: number };   // ce que je sais de moi
+  profil: { endurance: number; pointe: number; agressivite: number; experience: number; fatigueRelais: number };   // ce que je sais de moi
 }
 
 /** Valeurs exactes correspondantes : la trace montre ce que le coureur croyait *et* la réalité (§4.1). */
@@ -245,8 +246,6 @@ export interface Interprete {
   abriPerdu: number;          // 0..1 : quelqu'un est devant (à portée), mais je n'ai plus son abri (v0.1.2b)
   retourFaisable: number;     // 0..1 : revenir sur lui, à vitesse de rapprochement raisonnable, tient dans ce que je peux soutenir
   aigue: number;              // 0..1 : jambes qui chargent (au-dessus du plancher depuis un moment)
-  excesRelais: number;        // 0..1 : j'ai plus roulé que ce que j'ai vu des autres
-  rasLeBol: number;           // 0..1 : je suis presque seul à rouler (d'après ce que j'ai vu)
   sprintFocus: number;        // 0..1 : mon atout est le sprint
   autres: AutreInterprete[];
   groupe: { taille: number; rythme: 'stable' | 'monte' | 'baisse'; cohesion: 'serre' | 'etire' };
