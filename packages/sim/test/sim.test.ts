@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { creerMonde, pas, simuler, dureeMax, dangerSuppose, dispositionDe, PLACE_LABEL, INTENTION_LABEL, expliquer, aspiration, aspirationValeur, ASPIRATION, puissanceVers, wattsPour, capSoutenu, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF, niveauDe, durabilitePct, ftpWkg, lecture, palierDe, PALIERS, pointeNorm } from '../src/index';
+import { creerMonde, pas, resistance, forcePenteRoulement, simuler, dureeMax, dangerSuppose, dispositionDe, PLACE_LABEL, INTENTION_LABEL, expliquer, aspiration, aspirationValeur, ASPIRATION, puissanceVers, wattsPour, capSoutenu, E_CUIT, INTENTIONS, creerRoute, ROAD_HALF, niveauDe, durabilitePct, ftpWkg, lecture, palierDe, PALIERS, pointeNorm } from '../src/index';
 import { executionDe } from '../src/scenario';
 import { porteOuverte } from '../src/action';
 import { PLANCHER, vitesseSolo, capf, axeY, enLigne, EFFORT_PHYSIQUE, SPRINT, capExplosif, consommer, distanceSprint } from '../src/index';
@@ -159,7 +159,7 @@ describe('v0.0.3a : aspiration en cloche et cumul multiplicatif', () => {
     expect(v(0.6, 0)).toBeGreaterThan(0.3);
     expect(v(0.6, 0.15)).toBeGreaterThan(0.9 * v(0.6, 0));        // petit décalage : coût faible (sommet plat)
     expect(v(0.6, 0.5)).toBeLessThan(0.6 * v(0.6, 0));            // demi-largeur d'épaule : on a perdu une bonne part
-    expect(v(0.6, 1.2)).toBe(0);                                  // hors sillage
+    expect(v(0.6, 1.6)).toBe(0);                                  // hors sillage
     expect(v(1, 0)).toBeGreaterThan(v(3, 0));
     expect(v(ASPIRATION.portee + 1, 0)).toBe(0);
     for (let dy = 0; dy < 1.2; dy += 0.1) expect(v(1, dy + 0.1)).toBeLessThanOrEqual(v(1, dy) + 1e-12);   // jamais croissante
@@ -445,7 +445,7 @@ describe('v0.0.3b : tests de retrait des causes (docs/v0.0.3-chaine.md §4)', ()
     }
     return { groupes: groupes / ech, etendue: etendue / ech, cv: cv / seeds.length };
   };
-  const seeds = [1, 2, 3, 4, 5, 6];
+  const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];      // 6 seeds suffisaient avant la v0.1.2a ; le nombre de groupes est bruité
   it('aspiration à zéro : le groupe se disperse', () => {
     const normal = mesure(() => {}, seeds);
     const base = ASPIRATION.base;
@@ -621,4 +621,45 @@ describe('v0.0.3d : modèle de sprint', () => {
     expect([...gagnants].sort()).toEqual(['attaquant', 'opportuniste', 'rouleur', 'sprinteur']);
     expect(serres / n).toBeGreaterThan(0.4);      // 58 % sur 300 courses (v0.1.1) ; seuil abaissé de 0,5 : 60 courses suffisent à 10 points de bruit
   }, 120000);
+});
+
+describe('v0.1.2a : aspiration calibrée sur des formations (docs/v0.1.2-groupe.md §3.2)', () => {
+  const formation = (spec: number[], sx: number, sy: number) => {
+    const w = creerMonde({ seed: 1 });
+    const pos: { x: number; y: number; row: number }[] = [];
+    spec.forEach((n, i) => { for (let k = 0; k < n; k++) pos.push({ x: 100 - i * sx, y: (k - (n - 1) / 2) * sy, row: i }); });
+    const rs = w.riders.slice(0, pos.length);
+    rs.forEach((r, i) => { r.status = 'course'; r.x = pos[i]!.x; r.y = pos[i]!.y; r.cw = 0; r.hw = 3; });
+    return pos.map((p, i) => ({ row: p.row, abri: aspiration(rs[i]!, rs) }));
+  };
+  const LIGNE = 1.8 + 0.6;          // roue à roue 0,6 m
+  it('file indienne à 0,6 m : le meneur n\'a pas d\'abri, le 2e ≈ 38 %, les rangs 3-4 ≈ 50-56 %', () => {
+    const f = formation([1, 1, 1, 1, 1, 1, 1, 1], LIGNE, 0);
+    expect(f[0]!.abri).toBe(0);
+    expect(f[1]!.abri).toBeGreaterThan(0.33); expect(f[1]!.abri).toBeLessThan(0.42);
+    for (const k of [2, 3]) { expect(f[k]!.abri).toBeGreaterThan(0.45); expect(f[k]!.abri).toBeLessThan(0.6); }
+    for (let k = 1; k < 8; k++) expect(f[k]!.abri).toBeGreaterThanOrEqual(f[k - 1]!.abri - 1e-9);          // jamais moins abrité en reculant dans la file
+  });
+  it('triangle inversé : le dernier est à ~58 % (littérature : 60 %), mieux abrité que dans une file de trois', () => {
+    const tri = formation([1, 2, 1], LIGNE, 0.7), file = formation([1, 1, 1], LIGNE, 0);
+    expect(tri[3]!.abri).toBeGreaterThan(0.5); expect(tri[3]!.abri).toBeLessThan(0.65);
+    expect(tri[3]!.abri).toBeGreaterThan(file[2]!.abri);
+  });
+  it('bloc compact de 8 (1-2-2-2-1) : suiveurs ≈ 50 % en moyenne (traînée moyenne du groupe ≈ la moitié), le mieux abrité ≈ 70 %, sous le plafond', () => {
+    const b = formation([1, 2, 2, 2, 1], LIGNE, 0.8), suiv = b.filter((x) => x.row > 0).map((x) => x.abri);
+    const moy = suiv.reduce((a, c) => a + c, 0) / suiv.length;
+    expect(moy).toBeGreaterThan(0.43); expect(moy).toBeLessThan(0.58);
+    expect(Math.max(...suiv)).toBeGreaterThan(0.62); expect(Math.max(...suiv)).toBeLessThanOrEqual(ASPIRATION.plafond);
+    const traineeMoyenne = (b.reduce((a, x) => a + (1 - x.abri), 0)) / b.length;      // meneur compris
+    expect(traineeMoyenne).toBeGreaterThan(0.45); expect(traineeMoyenne).toBeLessThan(0.65);
+  });
+  it('le sillage est un cône : l\'abri sur l\'axe décroît avec l\'écart pendant que sa largeur grandit ; l\'abri ne réduit que la traînée aérodynamique', () => {
+    const demi = (g: number) => { let y = 0; while (aspirationValeur(g, y) > aspirationValeur(g, 0) / 2 && y < 3) y += 0.01; return y; };
+    expect(aspirationValeur(0.5, 0)).toBeGreaterThan(aspirationValeur(3, 0)); expect(aspirationValeur(3, 0)).toBeGreaterThan(aspirationValeur(10, 0));
+    expect(demi(3)).toBeGreaterThan(demi(0.5)); expect(demi(10)).toBeGreaterThan(demi(3));
+    const w = creerMonde({ seed: 2 }), r = w.riders[0]!; r.hw = 0; r.cw = 0; r.pente = 0;
+    const solo = resistance(11, 0, r) * 11, abrite = resistance(11, 0.95, r) * 11, roulement = forcePenteRoulement(0, r.profile.mass) * 11;
+    expect(abrite).toBeGreaterThan(roulement);                 // à 95 % d'abri il reste le roulement
+    expect(abrite).toBeLessThan(0.25 * solo);
+  });
 });

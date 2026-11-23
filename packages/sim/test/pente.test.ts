@@ -222,9 +222,9 @@ describe('v0.0.5 : une étape se court, la pente fait le reste', () => {
     expect(moy(cote)).toBeLessThan(0.6 * moy(plat));
   }, 120000);
   it('les grimpeurs gagnent plus souvent en montagne qu\'à plat (et que le hasard : 2 sur 8)', () => {
-    const taux = (type: 'plate' | 'montagne') => { let g = 0; const n = 24; for (let k = 0; k < n; k++) { const w = courir(type, 100, 40 + k); if (w.riders[w.result.ordre[0]!]!.archetype === 'grimpeur') g++; } return g / n; };
+    const taux = (type: 'plate' | 'montagne') => { let g = 0; const n = 40; for (let k = 0; k < n; k++) { const w = courir(type, 100, 40 + k); if (w.riders[w.result.ordre[0]!]!.archetype === 'grimpeur') g++; } return g / n; };
     expect(taux('montagne')).toBeGreaterThan(taux('plate'));       // validation v0.1.0 : 17 % (plate) contre 46 % (montagne) sur 1 000 étapes
-  }, 600000);
+  }, 900000);
 });
 
 describe('v0.0.6 : le vent d\'une étape ne dépend pas du cap moyen du tracé', () => {

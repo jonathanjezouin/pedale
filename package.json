@@ -19,7 +19,8 @@
     "parcours": "npm run parcours -w @pedale/batch --",
     "atelier": "npm run dev -w @pedale/atelier",
     "etapes": "npm run etapes -w @pedale/batch --",
-    "dist:zip": "npm run dist:zip -w @pedale/game"
+    "dist:zip": "npm run dist:zip -w @pedale/game",
+    "groupe": "npm run groupe -w @pedale/batch --"
   },
   "engines": {
     "node": ">=20"

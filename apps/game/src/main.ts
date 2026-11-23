@@ -224,19 +224,22 @@ app.ticker.add(() => {
   }
   for (const [k, s] of tiles) { const [a, b] = k.split(',').map(Number) as [number, number]; if ((a < tx0 - 2 || a > tx1 + 2 || b < ty0 - 2 || b > ty1 + 2) && !devant.has(k)) { s.texture.destroy(true); s.destroy(); tiles.delete(k); } }
 
-  // aspiration : le sillage de chaque coureur (intensité = réduction de traînée qu'y trouverait un suiveur), dérivant avec le vent de côté
+  // aspiration : le sillage de chaque coureur est un cône (v0.1.2a) : sa largeur suit celle du modèle (σ(x) = σ0 + k·x, tracé à ±1,55 σ, là où l'abri
+  // tombe à 30 % de sa valeur sur l'axe) et son intensité suit la réduction de traînée qu'y trouverait un suiveur ; il dérive avec le vent de côté
   aspiGfx.clear();
   if (aspiOpacity > 0.01) {
-    const gaps = [0.2, 0.7, 1.4, 2.3, 3.4, 4.8, 6.5, 8.5, 11, 14];
+    const gaps = [0.2, 0.6, 1.2, 2, 3, 4.2, 5.6, 7.2, 9, 11, 13, 15];
+    const demi = (g: number) => 1.55 * (ASPIRATION.sigma0 + ASPIRATION.sigmaPente * g);
     W.riders.forEach((r, i) => {
       if (r.status !== 'course') return;
       const v = views[i]! as unknown as { s: number; d: number }, tb = tanVent(r);
-      let prevP: { x: number; y: number } | null = null;
-      gaps.forEach((g, k) => {
-        const p = pos(v.s - RIDER_LEN - g + 0.0, v.d + g * tb), a = aspirationValeur(g, 0) / ASPIRATION.base;
-        if (prevP && k > 0) aspiGfx.moveTo(prevP.x, prevP.y).lineTo(p.x, p.y).stroke({ width: 30 + 20 * a, color: 0x14c8b4, alpha: aspiOpacity * (0.15 + 0.85 * a) * 0.55, cap: 'round' });
-        prevP = p;
-      });
+      for (let k = 1; k < gaps.length; k++) {
+        const g0 = gaps[k - 1]!, g1 = gaps[k]!;
+        const a = Math.sqrt(aspirationValeur((g0 + g1) / 2, 0) / ASPIRATION.base);
+        if (a < 0.05) continue;
+        const pts = [pos(v.s - RIDER_LEN - g0, v.d + g0 * tb - demi(g0)), pos(v.s - RIDER_LEN - g1, v.d + g1 * tb - demi(g1)), pos(v.s - RIDER_LEN - g1, v.d + g1 * tb + demi(g1)), pos(v.s - RIDER_LEN - g0, v.d + g0 * tb + demi(g0))];
+        aspiGfx.poly(pts.flatMap((p2) => [p2.x, p2.y])).fill({ color: 0x14c8b4, alpha: aspiOpacity * 0.32 * a });
+      }
     });
   }
 

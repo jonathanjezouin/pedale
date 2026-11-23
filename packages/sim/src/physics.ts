@@ -92,13 +92,16 @@ export function vitesseSolo(power: number, cda: number, mass: number, vent: numb
 /** Tangente de l'angle du vent relatif vu par un coureur (le sillage dérive du côté où va l'air). */
 export const tanVent = (r: Rider) => clamp(r.cw / Math.max(2, r.v + r.hw), -1.2, 1.2);
 
-/** Aspiration : paramètres du modèle (une seule source de vérité, utilisée aussi par l'affichage). docs/v0.0.2-aspiration.md.
- *  Réduction de traînée apportée par UN coureur devant, en cloche latérale qui s'élargit en aval :
+/** Aspiration : paramètres du modèle (une seule source de vérité, utilisée aussi par l'affichage). docs/v0.0.2-aspiration.md, docs/v0.1.2-groupe.md §3.
+ *  Réduction de traînée apportée par UN coureur devant, en cloche latérale qui s'élargit en aval (un cône) :
  *    A · e^(−x/L) · e^(−y² / 2σ(x)²),  σ(x) = σ0 + k·x
  *  (x = écart entre roues, y = décalage latéral par rapport à son sillage).
- *  Centre : 0,5 m ≈ 38 %, 1 m ≈ 32 %, 3 m ≈ 16 %, 6 m ≈ 6 %. Sommet plat : 0,2 m de décalage coûte peu ; à 0,5 m il reste ≈ 40 % du gain ; au-delà de 0,9 m, presque plus rien.
- *  Cumul multiplicatif de 3 coureurs au plus, plafond 48 %. */
-export const ASPIRATION = { base: 0.45, longueur: 3.0, sigma0: 0.35, sigmaPente: 0.03, plafond: 0.48, portee: 14, nbMax: 3 };
+ *  Sur l'axe : 0,5 m ≈ 36 %, 1 m ≈ 34 %, 3 m ≈ 21 %, 6 m ≈ 10 %, 10 m ≈ 4 %. À 0,5 m de décalage il reste ≈ 50 % du gain.
+ *  v0.1.2a : cumul multiplicatif de **tous** les sillages à portée (avant : les 3 plus forts), plafond 85 % (avant 48 %) : une position enveloppée par plusieurs
+ *  coureurs (triangle, bloc) est mieux abritée que la file indienne. Calibré sur des formations (file : rang 2 ≈ 38 %, rangs 3-4 ≈ 50-56 % ;
+ *  triangle ≈ 58 % ; bloc de 8 : suiveurs ≈ 50 % en moyenne, le mieux abrité ≈ 70 %, soit une traînée moyenne de groupe ≈ 0,56). L'abri ne réduit que la traînée
+ *  aérodynamique (le roulement reste), voir `resistance`. */
+export const ASPIRATION = { base: 0.44, longueur: 4.0, sigma0: 0.40, sigmaPente: 0.06, plafond: 0.85, portee: 20 };
 const sigmaAspiration = (ecart: number) => ASPIRATION.sigma0 + ASPIRATION.sigmaPente * Math.max(ecart, 0);
 export function aspirationValeur(ecart: number, dy: number): number {
   if (ecart > ASPIRATION.portee) return 0;
@@ -111,19 +114,15 @@ export function aspirationValeur(ecart: number, dy: number): number {
  *  à `gap` mètres derrière lui il est centré à o.y + gap·tanβ. De face : tout droit derrière ; de côté : en éventail. */
 export function aspiration(self: Rider, others: Rider[]): number {
   const tb = tanVent(self);
-  const ds: number[] = [];
+  let reste = 1;
   for (const o of others) {
     if (o === self || o.status !== 'course') continue;
     const gap = o.x - self.x - RIDER_LEN;
     if (o.x <= self.x || gap > ASPIRATION.portee) continue;
     const dy = Math.abs(self.y - (o.y + Math.max(gap, 0) * tb));
     const d = aspirationValeur(gap, dy);
-    if (d > 0) ds.push(d);
+    if (d > 0) reste *= 1 - d;          // cumul multiplicatif : 1 − Π(1 − dᵢ)
   }
-  // cumul multiplicatif des sillages les plus forts : 1 − Π(1 − dᵢ)
-  ds.sort((a, b) => b - a);
-  let reste = 1;
-  for (let i = 0; i < Math.min(ASPIRATION.nbMax, ds.length); i++) reste *= 1 - ds[i]!;
   return Math.min(ASPIRATION.plafond, 1 - reste);
 }
 
