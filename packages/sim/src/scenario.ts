@@ -87,7 +87,7 @@ export function creerMonde(partiel: Partial<Config> & { seed: number }): World {
       // départ d'étape : réserves pleines ; fin d'étape du POC : on arrive déjà entamé
       E: etape ? range(r, 0.97, 1) : clamp(range(r, 0.62, 0.85) * (0.9 + 0.1 * (profile.tEnd / 2700)), 0.3, 1), X: etape ? range(r, 0.97, 1) : range(r, 0.92, 1),
       intent: { kind: null, since: 0, commitUntil: 0, nextEval: 0, sprint: false, cible: null, effort: null, effortMax: 1, fatigueMax: 1, place: 'garder', placeAtteinte: false, forceEval: 'depart' },
-      geste: { nature: null, phase: '', phaseSince: 0, vHold: 0, side: -1, limiteT: -1e9, surLimiteDepuis: -1, roueT: -1e9, enSuivi: false, place: null, roueId: null, vRoue: 0, aRoue: 0, dyAbri: 0, sensAbri: 1, abriPrev: 0, abriT: 0, latErr: 0, porteDepuis: -1 },
+      geste: { nature: null, phase: '', phaseSince: 0, vHold: 0, side: -1, limiteT: -1e9, surLimiteDepuis: -1, roueT: -1e9, enSuivi: false, place: null, roueId: null, vRoue: 0, aRoue: 0, errGap: 0, branche: '', dyAbri: 0, sensAbri: 1, abriPrev: 0, abriT: 0, latErr: 0, porteDepuis: -1 },
       exec: executionDe(profile.experience),
       rng: mulberry32((cfg.seed * 2654435761 + (i + 1) * 40503) ^ 0xb01d),
       biais: { reserve: 0, explosivite: 0 }, memoire: {}, vus: [], attaqueVue: null, allure: { v: 0, hist: [], tendance: 0 }, enTetePrev: false, suiviDePres: false,
@@ -118,7 +118,7 @@ export function creerMonde(partiel: Partial<Config> & { seed: number }): World {
     events: [], trace: [],
     meneurId: null, meneurDepuis: 0, meneurCandidat: null, meneurCandidatDepuis: 0, changementsDeTete: 0,
     attaque: null, sprintLance: false,
-    vue: { ordre: [], vitesse: vInit, meneur: null, xMoyen: 0, xFront: 0, tanB: 0, groupes: [], yTete: 0, coteMontant: -1 },
+    vue: { ordre: [], vitesse: vInit, meneur: null, xMoyen: 0, xFront: 0, xTeteGroupe: {}, tanB: 0, groupes: [], yTete: 0, coteMontant: -1 },
     result: { statut: 'en cours', ordre: [], vainqueur: null, tFin: 0, neutralisee: false },
     nextEventId: 0, vInit, road, vent,
     tMax: dureeMax(cfg.distance, cfg.parcours ? evaluerParcours(cfg.parcours).duree : 0), evalCache: {},

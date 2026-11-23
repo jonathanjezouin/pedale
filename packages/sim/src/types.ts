@@ -92,6 +92,8 @@ export interface Geste {
   place: Place | null;         // place visée pour laquelle la phase courante a été engagée
   roueId: number | null;       // roue actuellement suivie (pour réinitialiser filtre et recherche d'abri)
   vRoue: number;               // vitesse de la roue telle que je la perçois (filtrée par mon délai de réaction)
+  branche: string;             // branche d'agir qui a produit la dernière commande (diagnostic)
+  errGap: number;              // erreur lente d'appréciation de l'écart à la roue (m), bruit d'exécution (v0.1.2b)
   aRoue: number;               // accélération de la roue telle que je l'estime (dérivée filtrée de vRoue) : sert à anticiper (v0.1.1)
   dyAbri: number;              // décalage latéral trouvé par la recherche locale de l'abri (m)
   sensAbri: 1 | -1;            // sens de la recherche locale
@@ -240,6 +242,8 @@ export interface Interprete {
   // quantités continues utilisées par « Vouloir »
   reserveBasse: number;       // 0..1
   explosiviteBasse: number;   // 0..1
+  abriPerdu: number;          // 0..1 : quelqu'un est devant (à portée), mais je n'ai plus son abri (v0.1.2b)
+  retourFaisable: number;     // 0..1 : revenir sur lui, à vitesse de rapprochement raisonnable, tient dans ce que je peux soutenir
   aigue: number;              // 0..1 : jambes qui chargent (au-dessus du plancher depuis un moment)
   excesRelais: number;        // 0..1 : j'ai plus roulé que ce que j'ai vu des autres
   rasLeBol: number;           // 0..1 : je suis presque seul à rouler (d'après ce que j'ai vu)
@@ -341,6 +345,7 @@ export interface Vue {
   meneur: Rider | null;      // le plus avancé des coureurs dans la file
   xMoyen: number;
   xFront: number;            // abscisse du coureur le plus avancé
+  xTeteGroupe: Record<number, number>;   // abscisse de la tête du groupe de chaque coureur (ancrage de sa file, v0.1.2b)
   tanB: number;              // tangente de l'angle du vent relatif : décalage latéral du sillage par mètre
   groupes: Rider[][];        // vue dérivée : suites de coureurs consécutifs sans « décroché » ; chaque groupe de la tête vers l'arrière
   yTete: number;             // décalage latéral de la tête de file (côté du vent si vent de côté)

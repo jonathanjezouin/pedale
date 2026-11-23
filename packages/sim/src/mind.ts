@@ -161,7 +161,7 @@ export function contrat(r: Rider, p: Percu, ip: Interprete, k: Intention, ctx: C
       effortMax = EFFORT_PHYSIQUE; fatigueMax = Math.max(fat, 0.8);
       break;
     case 'revenir':
-      cible = null; effortMax = 1.12; fatigueMax = Math.max(fat, 0.85);
+      cible = null; effortMax = 1.2; fatigueMax = Math.max(fat, 0.85);
       break;
     case 'gerer':
       cible = null; effort = 0.78; effortMax = 0.78; fatigueMax = 1.0;
@@ -299,6 +299,14 @@ export function interpreter(r: Rider, p: Percu): Interprete {
     budget = p.moi.reserve - (ev.duree * CHARGE_BUDGET) / (r.profile.tEnd * r.usure.echelle);
   }
 
+  // ne pas perdre l'abri du groupe (v0.1.2b, docs/v0.1.2-groupe.md §5) : quelqu'un est devant, à portée, et je n'ai plus son abri
+  const ecartD = p.moi.ecartDevant;
+  const abriPerdu = ecartD < 120 ? clamp((0.12 - p.moi.abrite) / 0.12, 0, 1) * clamp((ecartD - 3) / 6, 0, 1) : 0;
+  // revenir à ~1,2 m/s de mieux que le groupe devant : ce que ça me coûte, exposé, par rapport à ce que je peux soutenir
+  const vRetour = Math.max(r.v, p.rivaux.allure) + clamp(ecartD / 20, 0, 1.2);
+  const effortRetour = (resistance(vRetour, 0, r) * vRetour) / r.profile.ftp;
+  const retourFaisable = clamp((1.3 * capf(p.moi.reserve) - effortRetour) / 0.25, 0, 1);
+
   const tend = p.rivaux.tendanceAllure;
   const rythme: Interprete['groupe']['rythme'] = tend > 0.4 ? 'monte' : tend < -0.4 ? 'baisse' : 'stable';
   const cohesion: Interprete['groupe']['cohesion'] = p.moi.groupeTaille > 1 && p.moi.groupeEtendue / (p.moi.groupeTaille - 1) > 8 ? 'etire' : 'serre';
@@ -313,6 +321,7 @@ export function interpreter(r: Rider, p: Percu): Interprete {
   if (terrain !== 'plat') phrases.push(terrain === 'montee' ? `je suis en montée (${pente.toFixed(1).replace('.', ',')} %)` : `je suis en descente (${pente.toFixed(1).replace('.', ',')} %)`);
   if (colDevant) phrases.push(`une montée qui compte arrive dans ${(colDevant.distance / 1000).toFixed(1).replace('.', ',')} km (${(colDevant.montee.longueur / 1000).toFixed(0)} km à ${colDevant.montee.pente.toFixed(1).replace('.', ',')} %)`);
   if (budget < 0.2) phrases.push(`ma réserve ne suffira pas pour le reste de l'étape`);
+  if (abriPerdu > 0.5 && position !== 'decroche') phrases.push(`je n'ai plus l'abri du groupe (le coureur devant est à ${Math.round(ecartD)} m)${retourFaisable > 0.5 ? ', je peux encore revenir' : ', revenir me coûterait trop'}`);
   if (position === 'decroche') phrases.push(`je suis décroché (${Math.round(p.moi.ecartDevant)} m)`);
   else if (position === 'premier') phrases.push('je suis en tête de la course');
   else if (p.moi.estEnTete) phrases.push('je suis en tête de mon groupe');
@@ -324,7 +333,7 @@ export function interpreter(r: Rider, p: Percu): Interprete {
   return {
     forme, explosivite, distance, position, placement: p.moi.abrite > 0.12 ? 'abrite' : 'expose',
     reserveBasse: clamp((0.45 - E) / 0.35, 0, 1), explosiviteBasse: clamp((0.6 - X) / 0.4, 0, 1),
-    aigue: p.moi.aigue,
+    aigue: p.moi.aigue, abriPerdu, retourFaisable,
     excesRelais, rasLeBol, sprintFocus, autres, groupe: { taille: p.moi.groupeTaille, rythme, cohesion },
     terrain, colEnCours, colDevant, budget, plancher, effortRequis, inconfort: !p.moi.estEnTete && p.moi.effortRessenti > plancher + 0.03,
     inconfortEnTete: p.moi.estEnTete && effortRequis > plancher + 0.05,
@@ -355,6 +364,7 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
     switch (k) {
       case 'abriter': {
         if (p.moi.decroche) vetos.push('Je suis décroché : pas de roue à suivre, je dois revenir ou gérer');
+        mk(raisons, 'perdu', `Je n'ai plus l'abri du groupe (à ${Math.round(p.moi.ecartDevant)} m) : rester là ne m'abrite plus`, -4 * it.abriPerdu);
         // garder des forces pour la fin n'a plus de sens quand la fin est là
         mk(raisons, 'forces', 'Je veux garder des forces pour la fin', (1.5 + 1.5 * it.sprintFocus) * smoothstep(500, 2500, d));
         mk(raisons, 'reserve', 'Ma réserve est basse', 4 * it.reserveBasse);
@@ -456,14 +466,16 @@ export function evaluer(w: World, r: Rider, p: Percu, it: Interprete): Evaluatio
         break;
       }
       case 'gerer': {
-        if (!p.moi.decroche) vetos.push("Je ne suis pas décroché : j'ai quelqu'un à ma portée");
+        if (!p.moi.decroche && !(it.abriPerdu > 0.3 && it.retourFaisable < 0.5)) vetos.push("Je ne suis pas décroché : j'ai quelqu'un à ma portée ou je peux le rejoindre");
+        mk(raisons, 'infaisable', "Revenir me coûterait plus que ce que je peux soutenir : je lâche", 2.5 * it.abriPerdu * (1 - it.retourFaisable));
         mk(raisons, 'lache', 'Je ne peux plus suivre le rythme', 1.5);
         mk(raisons, 'reserve', 'Ma réserve est basse', 3 * it.reserveBasse);
         mk(raisons, 'loin', 'Le coureur devant est loin', 3.5 * clamp(p.moi.ecartDevant / 300, 0, 1));
         break;
       }
       case 'revenir': {
-        if (!p.moi.decroche) vetos.push("Je ne suis pas décroché : j'ai quelqu'un à ma portée");
+        if (!p.moi.decroche && it.abriPerdu < 0.3) vetos.push("Je ne suis pas décroché et j'ai l'abri du groupe");
+        mk(raisons, 'survie', `Je n'ai plus l'abri du groupe, il est à ${Math.round(p.moi.ecartDevant)} m : je reviens tant que c'est possible`, 5 * it.abriPerdu * it.retourFaisable);
         if (cuit) vetos.push('Je suis cuit : je ne peux pas revenir');
         mk(raisons, 'ecart', 'Le coureur devant est tout proche', 4 * clamp(1 - p.moi.ecartDevant / 250, 0, 1));
         mk(raisons, 'arrivee', "L'arrivée est proche : je me bats jusqu'au bout", 2 * (1 - smoothstep(1500, 5000, d)));

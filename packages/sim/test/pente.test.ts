@@ -201,11 +201,11 @@ describe('v0.0.5 : une étape se court, la pente fait le reste', () => {
   }, 120000);
   it('les groupes se désagrègent par la pente : l\'écart d\'arrivée moyen est plus grand en montagne qu\'en plaine', () => {
     const med = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
-    const ecarts = (type: 'plate' | 'montagne') => Array.from({ length: 16 }, (_, k) => {
-      const t = courir(type, 100, 21 + k).riders.map((r) => r.finishTime!).sort((a, b) => a - b); return t[t.length - 1]! - t[0]!;
+    const ecarts = (type: 'plate' | 'montagne') => Array.from({ length: 30 }, (_, k) => {
+      const t = courir(type, 100, 1 + k).riders.map((r) => r.finishTime!).sort((a, b) => a - b); return t[t.length - 1]! - t[0]!;
     });
-    expect(med(ecarts('montagne'))).toBeGreaterThan(1.5 * med(ecarts('plate')));      // lot de 30 étapes de 100 km : 8,0 min contre 2,3 min en moyenne
-  }, 240000);
+    expect(med(ecarts('montagne'))).toBeGreaterThan(1.5 * med(ecarts('plate')));      // mêmes 30 seeds que `npm run etapes` (v0.1.2b) : 6,9 min contre 1,8 min en moyenne
+  }, 400000);
   it('l\'abri vaut moins en côte qu\'à plat, en watts économisés', () => {
     const w = mondeEtape('montagne', 60, 4);
     const cote: number[] = [], plat: number[] = [];

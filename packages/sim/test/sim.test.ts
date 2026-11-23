@@ -63,7 +63,7 @@ describe('simulation v0.0.1', () => {
       const w = simuler(creerMonde({ seed }));
       const meneurs = w.riders.filter((r) => r.stats.relaisPris > 0).length;
       expect(meneurs).toBeGreaterThanOrEqual(5);
-      expect(w.changementsDeTete).toBeGreaterThan(15);
+      expect(w.changementsDeTete).toBeGreaterThan(8);      // v0.1.2b : des tours plus longs (≈ 60 s) donc moins de changements (> 15 avant)
     }
   });
 
@@ -534,7 +534,7 @@ describe('v0.0.3c : plancher et place au moindre effort', () => {
         }
       }
     }
-    expect(insertions).toBeGreaterThan(20);
+    expect(insertions).toBeGreaterThan(8);        // v0.1.2b : 12 sur ces 4 courses (le groupe reste mieux groupé, moins de manœuvres) ; > 20 avant
   });
   it('les courses qui calaient en développement (seeds 9, 11, 17, 18, 24, 25, 54) finissent sans neutralisation', () => {
     for (const seed of [9, 11, 17, 18, 24, 25, 54]) { const w = simuler(creerMonde({ seed })); expect(w.result.neutralisee).toBe(false); }

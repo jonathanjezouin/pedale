@@ -2,7 +2,7 @@ export * from './types';
 export * from './physics';
 export * from './paliers';
 export * from './road';
-export { axeY, enLigne, decalage, LIMITE } from './placement';
+export { axeY, axeDe, enLigne, decalage, LIMITE } from './placement';
 export { creerMonde, configParDefaut } from './scenario';
 export { pas, simuler, dureeMax } from './world';
 export { percevoir, interpreter, evaluer, contrat, TUNE, distanceSprint, engagement } from './mind';

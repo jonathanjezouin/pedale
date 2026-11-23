@@ -4,7 +4,7 @@ import { agir, decrireAction } from './action';
 import {
   aspiration, capExplosif, consommer, E_CUIT, MAX_LAT_SPEED, LAT_ACCEL, LAT_TAU, FREINAGE_MAX, resistance, RIDER_LEN, capSoutenu,
 } from './physics';
-import { axeY, enLigne, LIMITE } from './placement';
+import { axeDe, enLigne, LIMITE } from './placement';
 import { contrat, distanceSprint, engagement, evaluer, interpreter, percevoir, TUNE } from './mind';
 import { observer, OBS_PERIODE } from './observation';
 import { clamp } from './util';
@@ -38,10 +38,7 @@ function instantane(w: World) {
   const k = Math.max(0, Math.min(1, (Math.abs(tanB) - 0.05) / 0.25));
   const xFront = actifs.length ? actifs[0]!.x : 0;
   const xMoyen = actifs.length ? actifs.reduce((s, r) => s + r.x, 0) / actifs.length : 0;
-  w.vue = { ordre: actifs, vitesse, meneur: null, xMoyen, xFront, tanB, groupes: [], yTete: coteMontant * k * (LIMITE - 0.5), coteMontant };
-  let meneur: Rider | null = null;
-  for (const r of actifs) if (enLigne(w, r) && (!meneur || r.x > meneur.x)) meneur = r;
-  w.vue.meneur = meneur;
+  w.vue = { ordre: actifs, vitesse, meneur: null, xMoyen, xFront, xTeteGroupe: {}, tanB, groupes: [], yTete: coteMontant * k * (LIMITE - 0.5), coteMontant };
   // décroché : à plus de 40 m du coureur juste devant (on redevient « dans la course » sous 25 m)
   actifs.forEach((r, i) => {
     const gap = i === 0 ? 1e9 : actifs[i - 1]!.x - r.x;
@@ -55,6 +52,12 @@ function instantane(w: World) {
   const groupes: Rider[][] = [];
   actifs.forEach((r, i) => { if (i === 0 || r.decroche) groupes.push([r]); else groupes[groupes.length - 1]!.push(r); });
   w.vue.groupes = groupes;
+  // chaque groupe a sa propre file, ancrée sur sa tête (v0.1.2b)
+  w.vue.xTeteGroupe = {};
+  for (const g of groupes) for (const r of g) w.vue.xTeteGroupe[r.id] = g[0]!.x;
+  let meneur: Rider | null = null;
+  for (const r of actifs) if (enLigne(w, r) && (!meneur || r.x > meneur.x)) meneur = r;
+  w.vue.meneur = meneur;
 }
 
 function suiviDeTete(w: World) {
@@ -195,7 +198,7 @@ function physique(w: World) {
     r.vy += clamp(vyDes - r.vy, -LAT_ACCEL * dt, LAT_ACCEL * dt);
     const ny = Math.max(-LIMITE, Math.min(LIMITE, r.y + r.vy * dt));
     // on n'entre dans la file que s'il y a de la place
-    if (!enLigne(w, r, 0.9) && Math.abs(ny - axeY(w, r.x)) < 0.9) {
+    if (!enLigne(w, r, 0.9) && Math.abs(ny - axeDe(w, r)) < 0.9) {
       const occupe = act.some((o) => o !== r && enLigne(w, o, 0.9) && Math.abs(o.x - r.x) < RIDER_LEN + 0.4);
       if (!occupe) r.y = ny; else r.vy = 0;
     } else r.y = ny;

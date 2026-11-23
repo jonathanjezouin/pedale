@@ -2,6 +2,13 @@
 
 ## v0.1.2 — comportement de groupe (en cours ; numéros de version passés à la fin de la v0.1.2d)
 Conception : `docs/v0.1.2-groupe.md`. Banc d'essai : `npm run groupe`.
+### v0.1.2b — agir et suivre
+- **Régulateur de suivi** : écart visé en secondes (écart de confort + 0,045 s de roue à roue), bande morte, amortissement (gain faible dans la bande, plus fort au-delà), vitesse de rapprochement bornée à 1,2 m/s, évitement du contact bruité par l'exécution. À lui seul, effet quasi nul.
+- **Quatre causes structurelles** trouvées au banc : axe de file global (un groupe scindé n'avait plus de roue à suivre), « sans roue on tient la vitesse médiane de la course », freinage à fond sur un coureur à ma hauteur (−6 km/h en 2 s), perdre l'abri sans conséquence dans Vouloir. Corrigées : file par groupe, rejoindre le coureur devant, évitement limité au recouvrement latéral, `abriPerdu` / `retourFaisable` / survie / abandon explicite. Détail : `docs/v0.1.2-groupe.md` §5.1.
+- Banc (8 coureurs, vent fixe / de face) : pertes de roue 19 / 60 → 16 / 14 ; abri hors tête 22 / 30 → 33 / 38 % ; durée médiane d'un tour 42 / 48 → 69 / 58 s. Étapes (30 × 100 km) : groupe de tête à 20 km 5,2 / 6,3 / 4,6 ; décrochages 88 / 33 / 82 par étape (105 / 111 / 129) ; sprinteurs 23 / 33 / 20 %.
+- Tests : trois seuils statistiques ajustés (changements de tête > 8 au lieu de 15, insertions > 8 au lieu de 20, étapes de montagne contre plaine sur 30 seeds) : le groupe reste mieux groupé, donc moins de manœuvres. Diagnostic : la branche d'`agir` qui produit la commande est notée dans `geste.branche`.
+- **Cible v0.1.2b non atteinte** : pertes de roue ≤ 3 par course (16 mesurées). Reste à traiter en v0.1.2c (fatigue aiguë, relais).
+
 ### v0.1.2a — banc d'essai et aspiration
 - **Banc d'essai de groupe** (`tools/batch/src/groupe.ts`) : groupes de 4 et 8, plat, vent fixe et de face ; durée des tours, répartition de la tête, vraies pertes de roue, abri, longueur du groupe, frôlements. Le meneur est recalculé depuis les positions (une première mesure fondée sur `meneurId` donnait à tort des tours de 10 s).
 - **État de départ** (8 coureurs, vent fixe) : 19 pertes de roue par course (60 avec vent de face), abri moyen hors tête 22 %, un coureur 45 % du temps en tête et un autre 1 %, 230 frôlements par course.
