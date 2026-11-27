@@ -11,3 +11,7 @@ export { analyserTrace, ecartsAuxBornes } from './analyse.ts';
 export type { AnalyseTrace, ZoneLacets, Droite, Virage } from './analyse.ts';
 export { PARAMETRES_ETAPE, TYPES_ETAPE, LARGEUR_ROUTE_M, ECART_MIN_M, RECROISEMENT_S_M, RAYON_DROITE_M, droitesLonguesRequises } from './etapes.ts';
 export type { TypeEtape, ParametresEtape } from './etapes.ts';
+export { genererProfil, mesurerProfil, ecartsProfil } from './profil.ts';
+export type { Profil, TronconProfil, AnalyseProfil } from './profil.ts';
+export { PARAMETRES_PROFIL, VARIATION_PENTE_MAX_PAR_M, RAMPE_M_PAR_UNITE_PENTE, TRONCON_MIN_M } from './etapes.ts';
+export type { TypeTroncon, ParametresProfil } from './etapes.ts';

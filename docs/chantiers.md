@@ -146,6 +146,8 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 
 **But** : disposer d'une route réaliste (tracé + profil d'altitude) sur laquelle un coureur pourra rouler, et la regarder défiler sans défaut graphique, quelle que soit la longueur de l'étape.
 
+**Ordre d'exécution (décidé en cours de chantier).** 2.1, 2.2 (tracé de base, réalisé), puis **2.3 (profil d'étape) avant 2.2b (tracé conditionné par la pente)**, puis 2.4 et suivantes. Le profil est généré en premier pour la longueur demandée ; le tracé le reçoit ensuite en entrée (même abscisse `s`) : là où la pente est faible, droites et virages doux sont plus probables ; là où elle est moyenne, virages moyens ; là où elle est raide, lacets possibles. Ce sont des probabilités, pas des règles : une pente forte en ligne droite reste possible.
+
 **Critères du chantier entier**
 - [auto] 1 000 routes générées avec des seeds différentes, pour chacun des types d'étape, sans échec, **sans que la route ne se recroise ni ne se frôle**, avec **de vraies lignes droites** en plus des virages, et respectant toutes les bornes des UF 2.2 et 2.3.
 - [visuel] Sur 5 seeds par type d'étape, la route paraît plausible : pas de virage impossible, pas de ligne droite parfaite sur plus de la longueur autorisée, profil crédible.
@@ -163,7 +165,7 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 - [auto] `s` croissant implique un avancement le long du tracé, sans retour en arrière ni sur place.
 - [auto] Résultats identiques à seed identique (déterminisme), sur deux exécutions.
 
-### UF 2.2 — Génération du tracé  *(réalisée : `monde/etapes.ts`, `analyse.ts`, `generation.ts`, `test/generation.test.ts`, 30 tests)*
+### UF 2.2 — Génération du tracé (base, sans profil ; reprise en UF 2.2b)  *(réalisée : `monde/etapes.ts`, `analyse.ts`, `generation.ts`, `test/generation.test.ts`, 30 tests)*
 
 **Contenu** : générer un tracé réaliste de route à partir d'une seed et d'un type d'étape (plaine, vallonné, montagne, éventuellement littoral). Virages larges, enchaînements, lacets de col, lignes droites de longueur variable.
 
@@ -196,17 +198,54 @@ Les fourchettes de virages par km et d'angles (vallonné, montagne) sont proviso
 
 *Précisions de réalisation.* « 1 000 seeds par type » = 1 000 seeds de 20 à 100 km, plus 30 seeds de 100 à 250 km par type, plus les extrêmes 20 km et 250 km contrôlés à pas fin (le coût du contrôle croît avec la longueur ; la suite complète dure environ 1 minute). Le générateur construit bloc par bloc (droite + virage, ou série de lacets), refuse tout bloc qui frôle le tracé existant (marge d'échantillonnage de 4 m) et recule de quelques blocs en cas d'impasse. Il expose les zones de lacets pour que l'UF 2.3 y place les montées. Les tests vérifient le non-recroisement avec un contrôle indépendant du générateur, lui-même validé contre une force brute et sur des cas de violation volontaires.
 
-### UF 2.3 — Profil d'étape
+### UF 2.3 — Profil d'étape  *(réalisée : `monde/profil.ts`, paramètres dans `etapes.ts`, `test/profil.test.ts`, 37 tests)*
 
-**Contenu** : altitude `z(s)` et pente `p(s)`, avec des tronçons nommés (plat, bosse, col, descente). Cohérence avec le tracé (lacets plutôt en montée de col).
+**Contenu** : altitude `z(s)` et pente `p(s)` générées à partir d'une seed, d'un type d'étape et d'une longueur, avec des tronçons nommés : plat, bosse (une côte, avec ou sans sa descente : celle-ci forme un tronçon « descente » à part une fois sur deux), col (montée jusqu'au sommet), descente. Le profil est indépendant du tracé et passe en entrée de sa génération (UF 2.2b).
+
+**Construction.** La pente est une suite de segments linéaires (rampes et paliers) ; l'altitude en est l'intégrale exacte, donc continue. La rampe entre deux pentes a une longueur imposée par la variation de pente maximale.
+
+**Valeurs retenues (validées par le propriétaire au démarrage de l'UF 2.3).**
+
+| | Plaine | Vallonné | Montagne |
+|---|---|---|---|
+| Pente max en montée | 3 % | 9 % | 12 % (en col) |
+| Pente max en descente | −4 % | −10 % | −14 % |
+| Dénivelé positif par km | 2 à 9 m/km | 10 à 22 m/km | 22 à 45 m/km |
+| Tronçons présents | plat, bosse, descente | plat, bosse (côtes), descente | plat, bosse, col (montée de 5 à 20 km à 5–9 % en moyenne), descente |
+| Altitude de départ | 50 à 200 m | 200 à 600 m | 500 à 1 500 m |
+| Altitude maximale | 400 m | 1 200 m | 2 800 m |
+
+Communes aux trois types : variation de pente bornée à 1 point de pente par 100 m (|dp/ds| ≤ 1·10⁻⁴ par mètre) ; longueur minimale d'un tronçon : 300 m ; altitude ≥ 0. Le dénivelé par km s'applique à toute longueur d'étape de 20 à 250 km (il n'est pas fixé par étape). Limite physique constatée : avec des pentes réalistes (7 % en montée, 9 % en descente) et un dénivelé qui revient à peu près à son niveau de départ, on ne peut pas monter plus d'environ 56 % de la longueur ni descendre plus de 44 %, soit au plus 39 m/km environ. Le haut de la fourchette montagne (45 m/km) n'est donc pas atteignable de façon crédible : la cible est tirée entre 30 et 60 % de la largeur de la fourchette (soit 28 à 35 m/km en montagne), et la fourchette reste la borne de contrôle. Les cols sont planifiés d'abord (de 450 à 1 400 m de haut, au moins 75 % du dénivelé), puis les bosses ; le plan est rejoué avec des hauteurs recalées jusqu'à obtenir le dénivelé visé à 3 % près. Un tronçon de moins de 300 m (en pratique le dernier, coupé à la longueur d'étape) est fusionné avec son voisin. Précision de réalisation : la bosse ou la côte dure au minimum le temps de monter puis redescendre à la pente maximale permise par la variation bornée (par exemple 1,2 km pour une côte à 6 %), donc « côtes de 0,5 à 3 km » du premier projet devient « de 1 à 4 km ».
 
 **Critères**
-- [auto] `z(s)` continue ; pente lissée : variation de pente bornée (pas de marche d'escalier).
-- [auto] Pente maximale par type (par exemple ≤ 3 % en plaine, ≤ 12 % en col ; valeurs exactes inscrites ici au démarrage).
-- [auto] Dénivelé positif cumulé conforme au type d'étape demandé (fourchette inscrite au démarrage).
-- [auto] Les tronçons sont étiquetés sans trou ni chevauchement, et couvrent toute l'étape.
-- [auto] Les lacets (courbure forte) apparaissent surtout sur des tronçons de montée.
+- [auto] `z(s)` continue ; pente lissée : |p(s + Δ) − p(s)| ≤ 1 point de pente par 100 m de Δ, pas de marche d'escalier.
+- [auto] Pente maximale par type (tableau), en montée et en descente.
+- [auto] Dénivelé positif par km conforme au type d'étape demandé (tableau), sur 1 000 seeds par type, longueurs de 20 à 250 km.
+- [auto] Altitude comprise entre 0 et l'altitude maximale du type ; altitude de départ dans la fourchette du type.
+- [auto] Les tronçons sont étiquetés (plat, bosse, col, descente) sans trou ni chevauchement, couvrent toute l'étape, et durent au moins 300 m. Les cols n'existent qu'en montagne.
+- [auto] Résultats identiques à seed identique.
 - [visuel] Profil d'étape à la manière d'un profil de course : on reconnaît un col, une bosse, un plat.
+
+### UF 2.2b — Tracé conditionné par la pente
+
+**Contenu** : reprise du générateur de tracé de l'UF 2.2 en lui donnant le profil de l'UF 2.3 en entrée. La pente en valeur absolue (montée comme descente, ce sont les mêmes versants) modifie la probabilité de chaque type de bloc. Les bornes globales du tableau de l'UF 2.2 (part de droite, virages par km, angle moyen, rayons, droites longues, non-recroisement, longueur) et leur contrôle en boucle fermée restent inchangés.
+
+**Valeurs retenues (validées par le propriétaire).**
+
+| Pente (valeur absolue) | Blocs favorisés | Lacets |
+|---|---|---|
+| Faible, < 3 % | droites longues, virages doux (angle ≤ 30°, grands rayons) | aucun |
+| Moyenne, 3 à 7 % | virages moyens (30 à 70°), droites plus courtes | aucun |
+| Forte, > 7 % | virages serrés, lacets, droites encore possibles | environ 1 bloc sur 3 (montagne seulement) |
+
+Ce sont des pondérations : aucune classe n'interdit un type de bloc, sauf les lacets hors montagne et hors pente forte. La plaine (pentes < 3 %) se comporte comme à l'UF 2.2.
+
+**Critères**
+- [auto] Tous les critères de l'UF 2.2 (non-recroisement, bornes du tableau, longueur) sont vérifiés tels quels sur 1 000 seeds par type, avec profil.
+- [auto] Lacets : au moins 90 % de leur longueur sur une pente d'au moins 7 % en valeur absolue.
+- [auto] Sur 1 000 seeds, pour les types où les trois classes de pente existent : la part de droite est plus grande sur pente faible que sur pente moyenne, et sur pente moyenne que sur pente forte ; l'angle moyen des virages croît avec la pente.
+- [auto] Des pentes fortes en ligne droite existent encore (la pente ne détermine pas le tracé).
+- [visuel] Planche : en montagne, les lacets se placent là où le profil grimpe fort ; les parties plates sont plutôt droites.
 
 ### UF 2.4 — Route à deux dimensions : largeur et bords
 
