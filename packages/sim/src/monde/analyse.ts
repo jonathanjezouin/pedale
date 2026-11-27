@@ -1,6 +1,7 @@
+import type { Profil } from './profil.ts';
 import type { SegmentRoute } from './route.ts';
 import {
-  PARAMETRES_ETAPE, RAYON_DROITE_M, droitesLonguesRequises, type TypeEtape,
+  PARAMETRES_ETAPE, PENTE_FORTE_MIN_RATIO, RAYON_DROITE_M, droitesLonguesRequises, type TypeEtape,
 } from './etapes.ts';
 
 export interface ZoneLacets {
@@ -110,4 +111,17 @@ export function ecartsAuxBornes(a: AnalyseTrace, type: TypeEtape, longueurDemand
   const deg = (a.angleMoyen_rad * 180) / Math.PI;
   if (deg < p.angleMoyen_deg[0] || deg > p.angleMoyen_deg[1]) e.push('angle moyen');
   return e;
+}
+
+/** Part de la longueur des lacets située sur une pente forte (≥ 7 % en valeur absolue, montée ou descente). 1 s'il n'y a pas de lacet. */
+export function partLacetsEnPenteForte(lacets: readonly ZoneLacets[], profil: Pick<Profil, 'pente'>, pas_m = 5): number {
+  let total = 0;
+  let forts = 0;
+  for (const z of lacets) {
+    for (let s = z.debut_m + pas_m / 2; s < z.fin_m; s += pas_m) {
+      total++;
+      if (Math.abs(profil.pente(s)) >= PENTE_FORTE_MIN_RATIO - 1e-12) forts++;
+    }
+  }
+  return total === 0 ? 1 : forts / total;
 }

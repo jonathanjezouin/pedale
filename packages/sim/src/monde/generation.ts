@@ -1,16 +1,20 @@
 import type { Alea } from '../contrats/index.ts';
-import { analyserTrace, ecartsAuxBornes, type ZoneLacets } from './analyse.ts';
+import { analyserTrace, ecartsAuxBornes, partLacetsEnPenteForte, type ZoneLacets } from './analyse.ts';
 import {
-  ECART_MIN_M, PARAMETRES_ETAPE, RECROISEMENT_S_M, droitesLonguesRequises, type ParametresEtape, type TypeEtape,
+  ECART_MIN_M, PARAMETRES_ETAPE, PART_LACETS_PENTE_FORTE_MIN, PENTE_FAIBLE_MAX_RATIO, PENTE_FORTE_MIN_RATIO, PROBA_LACETS_PENTE_FORTE,
+  RECROISEMENT_S_M, REGLAGE_PENTE, classePente, droitesLonguesRequises, type ParametresEtape, type TypeEtape,
 } from './etapes.ts';
+import type { Profil } from './profil.ts';
 import { avancer, creerRoute, type Route, type SegmentRoute } from './route.ts';
 
 export interface Trace {
   readonly type: TypeEtape;
   readonly longueur_m: number;
   readonly route: Route;
-  /** Zones de lacets (montagne) : l'UF 2.3 y place les montées. */
+  /** Zones de lacets (montagne), placées sur les pentes fortes du profil. */
   readonly lacets: readonly ZoneLacets[];
+  /** Profil d'étape qui a conditionné ce tracé. */
+  readonly profil: Profil;
   /** Nombre de constructions complètes nécessaires (1 = du premier coup). */
   readonly tentatives: number;
 }
@@ -38,6 +42,11 @@ class Chantier {
   s = 0;
   droite = 0;
   virage = 0;
+  nbVirages = 0;
+  /** Somme des angles bruts (avant facteur de classe de pente) : sert à asservir l'angle moyen sans effacer l'effet de la pente. */
+  sommeAnglesBruts_rad = 0;
+  /** Longueur de virage pondérée par le facteur « droite » de la classe de pente : vise un rapport droite/virage propre à chaque classe. */
+  virageCible_m = 0;
   private xs: number[] = [];
   private ys: number[] = [];
   private ss: number[] = [];
@@ -85,7 +94,7 @@ class Chantier {
   }
 
   /** Ajoute un bloc de segments s'il ne frôle pas le tracé existant ; sinon, rien ne change. */
-  tenter(bloc: readonly SegmentRoute[]): boolean {
+  tenter(bloc: readonly SegmentRoute[], angleBrut_rad = 0, poidsDroite = 1): boolean {
     const avant = this.xs.length;
     let pose = this.pose;
     let s = this.s;
@@ -103,8 +112,10 @@ class Chantier {
     this.pose = pose;
     this.s = s;
     this.segments.push(...bloc);
+    if (angleBrut_rad > 0) { this.nbVirages++; this.sommeAnglesBruts_rad += angleBrut_rad; }
     for (const seg of bloc) {
-      if (Math.abs(seg.courbure_rad_m) < 1 / 5000) this.droite += seg.longueur_m; else this.virage += seg.longueur_m;
+      if (Math.abs(seg.courbure_rad_m) < 1 / 5000) this.droite += seg.longueur_m;
+      else { this.virage += seg.longueur_m; this.virageCible_m += seg.longueur_m * poidsDroite; }
     }
     return true;
   }
@@ -112,13 +123,13 @@ class Chantier {
   private poseDe(p: Pose): Pose { return p; }
 
   instantane() {
-    return { n: this.segments.length, z: this.zones.length, pose: this.pose, s: this.s, d: this.droite, v: this.virage, e: this.xs.length };
+    return { n: this.segments.length, z: this.zones.length, pose: this.pose, s: this.s, d: this.droite, v: this.virage, e: this.xs.length, nv: this.nbVirages, sa: this.sommeAnglesBruts_rad, vc: this.virageCible_m };
   }
 
   restaurer(t: ReturnType<Chantier['instantane']>): void {
     this.segments.length = t.n;
     this.zones.length = t.z;
-    this.pose = t.pose; this.s = t.s; this.droite = t.d; this.virage = t.v;
+    this.pose = t.pose; this.s = t.s; this.droite = t.d; this.virage = t.v; this.nbVirages = t.nv; this.sommeAnglesBruts_rad = t.sa; this.virageCible_m = t.vc;
     this.retirerJusqua(t.e);
   }
 }
@@ -128,20 +139,24 @@ function positionsStratifiees(a: Alea, n: number, longueur_m: number): number[] 
   return Array.from({ length: n }, (_, i) => ((i + a.suivant()) * longueur_m) / n);
 }
 
-function tirerVirage(a: Alea, p: ParametresEtape, signe: number): SegmentRoute[] {
-  const angle = entre(a, p.angleTirage_deg[0], p.angleTirage_deg[1]) * DEG;
+/** Virage de 1 ou 2 arcs ; angle et rayons modulés par la classe de pente et par la correction d'angle moyen `kappa`. */
+function tirerVirage(a: Alea, p: ParametresEtape, signe: number, pente: ReturnType<typeof classePente>, kappa: number): { segments: SegmentRoute[]; angleBrut_rad: number } {
+  const r = REGLAGE_PENTE[pente];
+  const brut = entre(a, p.angleTirage_deg[0], p.angleTirage_deg[1]) * DEG * kappa;
+  const angle = brut * r.angle;
   const nbArcs = a.suivant() < 0.5 ? 1 : 2;
   const parts = nbArcs === 1 ? [1] : (() => { const u = entre(a, 0.3, 0.7); return [u, 1 - u]; })();
-  return parts.map((part) => {
-    const rayon = entreLog(a, p.rayonMin_m, p.rayonMax_m);
+  const segments = parts.map((part) => {
+    const w = a.suivant() ** r.rayonGamma;
+    const rayon = p.rayonMin_m * Math.exp(Math.log(p.rayonMax_m / p.rayonMin_m) * w);
     return { longueur_m: rayon * angle * part, courbure_rad_m: signe / rayon };
   });
+  return { segments, angleBrut_rad: brut };
 }
 
-/** Série de lacets : épingles alternées reliées par de courtes lignes droites, cap d'entrée retrouvé à la sortie. */
-function tirerLacets(a: Alea, p: ParametresEtape, signe: number): SegmentRoute[] {
+/** Série de `nb` lacets (pair) : épingles alternées reliées par de courtes droites, cap d'entrée retrouvé à la sortie. */
+function tirerLacets(a: Alea, p: ParametresEtape, signe: number, nb: number): SegmentRoute[] {
   const rayonMin = p.rayonMinLacet_m as number;
-  const nb = 2 * Math.floor(entre(a, 2, 6)); // 4 à 10, pair : le cap d'entrée est retrouvé
   const segs: SegmentRoute[] = [];
   let cumul = 0; // somme des angles signés déjà tournés
   for (let i = 0; i < nb; i++) {
@@ -156,16 +171,50 @@ function tirerLacets(a: Alea, p: ParametresEtape, signe: number): SegmentRoute[]
   return segs;
 }
 
-function construire(type: TypeEtape, longueur_m: number, a: Alea): { segments: SegmentRoute[]; zones: ZoneLacets[] } | null {
+/** Longueur approximative d'une épingle (arc + branche), pour dimensionner une série de lacets sur une pente forte. */
+const LONGUEUR_EPINGLE_M = 165;
+
+/** Classe de pente d'un bloc qui démarre en `s` : moyenne de |pente| sur les 300 m qui suivent. */
+function classeEn(profil: Profil, s: number): ReturnType<typeof classePente> {
+  return classePente((Math.abs(profil.pente(s)) + Math.abs(profil.pente(s + 150)) + Math.abs(profil.pente(s + 300))) / 3);
+}
+
+/** Distance, à partir de `s`, sur laquelle la pente reste forte (jusqu'à `max_m`). */
+function penteForteDevant(profil: Profil, s: number, max_m: number): number {
+  for (let d = 0; d < max_m; d += 20) if (Math.abs(profil.pente(s + d)) < PENTE_FORTE_MIN_RATIO) return d;
+  return max_m;
+}
+
+/** Positions des droites longues planifiées : par strates, de préférence sur pente faible. */
+function positionsDroitesLongues(a: Alea, n: number, longueur_m: number, profil: Profil, p: ParametresEtape): number[] {
+  const fenetre = p.droiteLongueMin_m * 1.2;
+  const plat = (s: number): boolean => {
+    for (let d = 0; d <= fenetre; d += 50) if (Math.abs(profil.pente(s + d)) >= PENTE_FAIBLE_MAX_RATIO) return false;
+    return true;
+  };
+  return Array.from({ length: n }, (_, i) => {
+    let choix = ((i + a.suivant()) * longueur_m) / n;
+    for (let essai = 0; essai < 12; essai++) {
+      const s = ((i + a.suivant()) * longueur_m) / n;
+      if (plat(s)) { choix = s; break; }
+    }
+    return choix;
+  });
+}
+
+function construire(type: TypeEtape, longueur_m: number, a: Alea, profil: Profil): { segments: SegmentRoute[]; zones: ZoneLacets[] } | null {
   const p = PARAMETRES_ETAPE[type];
   const c = new Chantier();
   const cible = entre(a, p.partCible[0], p.partCible[1]);
   const rapport = cible / (1 - cible);
   const km = longueur_m / 1000;
-  const longues = positionsStratifiees(a, Math.max(droitesLonguesRequises(p, longueur_m) + 1, Math.ceil(km * (p.droitesLonguesPar50km / 50) * 1.3)), longueur_m);
-  const lacets = p.rayonMinLacet_m === null ? [] : positionsStratifiees(a, Math.max(1, Math.round(km / 12)), longueur_m);
+  const angleCible = ((p.angleTirage_deg[0] + p.angleTirage_deg[1]) / 2) * DEG;
+  const longues = positionsDroitesLongues(
+    a, Math.max(droitesLonguesRequises(p, longueur_m) + 1, Math.ceil(km * (p.droitesLonguesPar50km / 50) * 1.3)), longueur_m, profil, p,
+  ).sort((x, y) => x - y);
   let iLongue = 0;
-  let iLacets = 0;
+  let longueurLacets = 0;
+  let finDerniersLacets = -Infinity;
   const droiteLongue = (): number => {
     const bas = p.droiteLongueMin_m * 1.05;
     const haut = p.droiteMax_m * 0.85;
@@ -176,47 +225,68 @@ function construire(type: TypeEtape, longueur_m: number, a: Alea): { segments: S
     return a.suivant() < 0.5 - 0.45 * Math.tanh(ecart / 0.7) ? 1 : -1;
   };
 
-  const historique: ReturnType<Chantier['instantane']>[] = [];
-  const reperes: [number, number][] = [];
+  const historique: { t: ReturnType<Chantier['instantane']>; iLongue: number; lacets: number; fin: number }[] = [];
   let retours = 0;
 
   while (c.s < longueur_m) {
     const t0 = c.instantane();
-    const mem: [number, number] = [iLongue, iLacets];
-    const zoneLacets = iLacets < lacets.length && c.s >= (lacets[iLacets] as number);
-    const droiteForcee = !zoneLacets && iLongue < longues.length && c.s >= (longues[iLongue] as number);
+    const mem = { iLongue, lacets: longueurLacets, fin: finDerniersLacets };
+    const classe = classeEn(profil, c.s);
+    const lacetsPossibles = p.rayonMinLacet_m !== null && classe === 'forte'
+      && longueurLacets < 0.12 * Math.max(c.s, 5000) && c.s - finDerniersLacets > 800 && a.suivant() < PROBA_LACETS_PENTE_FORTE;
+    const droiteForcee = !lacetsPossibles && iLongue < longues.length && c.s >= (longues[iLongue] as number);
     let ok = false;
     for (let essai = 0; essai < ESSAIS_PAR_BLOC && !ok; essai++) {
-      const virage = zoneLacets ? tirerLacets(a, p, signeVers()) : tirerVirage(a, p, signeVers());
-      const longueurVirage = virage.reduce((t, s) => t + s.longueur_m, 0);
+      // — série de lacets, seulement si la pente forte dure assez longtemps devant —
+      if (lacetsPossibles) {
+        const droite = entre(a, DROITE_MIN_M, 60);
+        const debut = c.s + droite;
+        const nMax = 2 * Math.floor(penteForteDevant(profil, debut, 1700) / LONGUEUR_EPINGLE_M / 2);
+        if (nMax >= 4) {
+          const nb = 2 * (2 + Math.floor(a.suivant() * (Math.min(10, nMax) / 2 - 1)));
+          const lacets = tirerLacets(a, p, signeVers(), Math.min(nb, nMax));
+          const fin = debut + lacets.reduce((t, s) => t + s.longueur_m, 0);
+          if (partLacetsEnPenteForte([{ debut_m: debut, fin_m: fin }], profil) >= PART_LACETS_PENTE_FORTE_MIN
+            && c.tenter([{ longueur_m: droite, courbure_rad_m: 0 }, ...lacets])) {
+            c.zones.push({ debut_m: debut, fin_m: c.s });
+            longueurLacets += c.s - debut;
+            finDerniersLacets = c.s;
+            ok = true;
+            continue;
+          }
+        }
+      }
+      // — bloc ordinaire : droite puis virage —
+      const r = REGLAGE_PENTE[classe];
+      // Angle : on asservit la moyenne des angles bruts (avant effet de la pente) sur la cible ; la pente garde donc son effet.
+      const souhaite = angleCible * (c.nbVirages + 1) - c.sommeAnglesBruts_rad;
+      const kappa = c.nbVirages < 4 ? 1 : Math.min(Math.max(souhaite / angleCible, 0.6), 1.6);
+      const virage = tirerVirage(a, p, signeVers(), classe, kappa);
+      const longueurVirage = virage.segments.reduce((t, s) => t + s.longueur_m, 0);
       let droite: number;
       if (droiteForcee) droite = droiteLongue();
       else {
-        const manque = rapport * (c.virage + (zoneLacets ? 0 : longueurVirage)) - c.droite;
+        // Droite : chaque classe vise son propre rapport droite/virage (rapport × facteur de classe) ; le niveau d'ensemble
+        // est corrigé par `niveau` pour que la part de droite de l'étape reste sur sa cible.
+        const total = c.droite + c.virage;
+        const part = total > 2000 ? c.droite / total : cible;
+        const niveau = Math.min(Math.max(1 + 2 * (cible - part) / cible, 0.5), 1.8);
+        const manque = niveau * rapport * (c.virageCible_m + longueurVirage * r.droite) - c.droite;
         droite = Math.min(Math.max(manque * Math.exp((a.suivant() - 0.5) * 1.6), DROITE_MIN_M), p.droiteMax_m * 0.85);
       }
-      const reste = longueur_m - c.s;
-      const bloc: SegmentRoute[] = [{ longueur_m: droite, courbure_rad_m: 0 }, ...virage];
-      if (zoneLacets) {
-        // La zone commence après la droite d'approche.
-        const debut = c.s + droite;
-        if (c.tenter(bloc)) { c.zones.push({ debut_m: debut, fin_m: c.s }); ok = true; }
-      } else ok = c.tenter(bloc);
-      if (ok && reste <= 0) break;
+      ok = c.tenter([{ longueur_m: droite, courbure_rad_m: 0 }, ...virage.segments], virage.angleBrut_rad, r.droite);
     }
     if (ok) {
-      historique.push(t0);
-      reperes.push(mem);
+      historique.push({ t: t0, ...mem });
       if (droiteForcee) iLongue++;
-      if (zoneLacets) iLacets++;
     } else {
       // Impasse : on défait le dernier bloc et on repart d'un autre tirage.
       if (++retours > RETOURS_MAX || historique.length === 0) return null;
       const arriere = Math.min(historique.length, 1 + Math.floor(a.suivant() * 3));
       for (let i = 0; i < arriere; i++) {
-        c.restaurer(historique.pop() as ReturnType<Chantier['instantane']>);
-        const r = reperes.pop() as [number, number];
-        iLongue = r[0]; iLacets = r[1];
+        const h = historique.pop() as (typeof historique)[number];
+        c.restaurer(h.t);
+        iLongue = h.iLongue; longueurLacets = h.lacets; finDerniersLacets = h.fin;
       }
     }
   }
@@ -237,16 +307,18 @@ function couper(segments: readonly SegmentRoute[], longueur_m: number): SegmentR
 }
 
 /**
- * Génère un tracé réaliste (UF 2.2) pour un type d'étape et une longueur, à partir du générateur seedé.
+ * Génère un tracé réaliste (UF 2.2, 2.2b) pour un type d'étape, une longueur et un profil d'étape de même longueur :
+ * la pente (valeur absolue) modifie la probabilité de chaque type de bloc.
  * Même `alea` dans le même état, mêmes paramètres : même tracé.
  */
-export function genererTrace(type: TypeEtape, longueur_m: number, alea: Alea): Trace {
+export function genererTrace(type: TypeEtape, longueur_m: number, alea: Alea, profil: Profil): Trace {
   if (!(longueur_m >= 1000)) throw new Error('Longueur d\'étape trop courte');
   for (let tentative = 1; tentative <= TENTATIVES_MAX; tentative++) {
-    const r = construire(type, longueur_m, alea);
+    const r = construire(type, longueur_m, alea, profil);
     if (!r) continue;
     if (ecartsAuxBornes(analyserTrace(r.segments, r.zones), type, longueur_m).length > 0) continue;
-    return { type, longueur_m, route: creerRoute(r.segments), lacets: r.zones, tentatives: tentative };
+    if (partLacetsEnPenteForte(r.zones, profil) < PART_LACETS_PENTE_FORTE_MIN) continue;
+    return { type, longueur_m, route: creerRoute(r.segments), lacets: r.zones, profil, tentatives: tentative };
   }
   throw new Error(`Génération impossible (${type}, ${longueur_m} m) après ${TENTATIVES_MAX} tentatives`);
 }

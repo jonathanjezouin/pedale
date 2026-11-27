@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { creerAlea } from '../src/moteur/alea.ts';
 import {
-  ECART_MIN_M, PARAMETRES_ETAPE, RECROISEMENT_S_M, TYPES_ETAPE, analyserTrace, creerRoute, droitesLonguesRequises,
-  ecartsAuxBornes, genererTrace, type Route, type TypeEtape,
+  CLASSES_PENTE, ECART_MIN_M, PARAMETRES_ETAPE, RECROISEMENT_S_M, TYPES_ETAPE, analyserTrace, classePente, creerRoute,
+  droitesLonguesRequises, ecartsAuxBornes, genererProfil, genererTrace, partLacetsEnPenteForte, type ClassePente, type Route,
+  type TypeEtape,
 } from '../src/monde/index.ts';
+
+/** Trace d'étape avec son profil (le tracé est conditionné par la pente, UF 2.2b). */
+function tracer(type: TypeEtape, longueur_m: number, graine: number) {
+  const profil = genererProfil(type, longueur_m, creerAlea(graine + 500_000));
+  return genererTrace(type, longueur_m, creerAlea(graine), profil);
+}
 
 const NB_SEEDS = 1000;
 const NB_LONGUES = 30;
@@ -46,15 +53,55 @@ function ecartMinimalBrut(route: Route, pas_m: number): number {
   return pire;
 }
 
-type Ligne = { graine: number; longueur: number; trace: ReturnType<typeof genererTrace>; analyse: ReturnType<typeof analyserTrace>; ecart: number };
+type Tally = Record<ClassePente, number>;
+const vide = (): Tally => ({ faible: 0, moyenne: 0, forte: 0 });
+type Ligne = {
+  graine: number; longueur: number; trace: ReturnType<typeof genererTrace>; analyse: ReturnType<typeof analyserTrace>; ecart: number;
+  /** Part des lacets sur pente forte (1 s'il n'y en a pas). */
+  lacetsFort: number;
+  /** Longueur (m) par classe de pente, hors lacets, et part de cette longueur en ligne droite. */
+  longueurClasse: Tally; droiteClasse: Tally;
+  /** Somme des angles (rad) et nombre des virages par classe de pente, hors lacets. */
+  angleClasse: Tally; nbViragesClasse: Tally;
+};
+
+/** Mesures par classe de pente, calculées sur le tracé et le profil (sans passer par le générateur). */
+function mesurerClasses(trace: ReturnType<typeof genererTrace>, analyse: ReturnType<typeof analyserTrace>) {
+  const longueurClasse = vide(), droiteClasse = vide(), angleClasse = vide(), nbViragesClasse = vide();
+  const enLacet = (s: number) => trace.lacets.some((z) => s >= z.debut_m && s <= z.fin_m);
+  let debut = 0;
+  for (const seg of trace.route.segments) {
+    const droit = Math.abs(seg.courbure_rad_m) < 1 / 5000;
+    const n = Math.max(1, Math.ceil(seg.longueur_m / 20));
+    for (let i = 0; i < n; i++) {
+      const s = debut + ((i + 0.5) * seg.longueur_m) / n;
+      if (enLacet(s)) continue;
+      const c = classePente(trace.profil.pente(s));
+      longueurClasse[c] += seg.longueur_m / n;
+      if (droit) droiteClasse[c] += seg.longueur_m / n;
+    }
+    debut += seg.longueur_m;
+  }
+  for (const v of analyse.virages) {
+    const c = classePente(trace.profil.pente(v.debut_m + v.longueur_m / 2));
+    angleClasse[c] += v.angle_rad; nbViragesClasse[c]++;
+  }
+  return { longueurClasse, droiteClasse, angleClasse, nbViragesClasse };
+}
 const cache = new Map<TypeEtape, Promise<Ligne[]>>();
 /** Calcul asynchrone avec pauses : un calcul de plusieurs dizaines de secondes ne doit pas bloquer le lanceur de tests. */
 async function calculer(type: TypeEtape): Promise<Ligne[]> {
   const lignes: Ligne[] = [];
   for (let g = 1; g <= NB_SEEDS + NB_LONGUES; g++) {
     const longueur = longueurDe(g);
-    const trace = genererTrace(type, longueur, creerAlea(g * 1000 + TYPES_ETAPE.indexOf(type)));
-    lignes.push({ graine: g, longueur, trace, analyse: analyserTrace(trace.route.segments, trace.lacets), ecart: ecartMinimal(trace.route) });
+    const idx = TYPES_ETAPE.indexOf(type);
+    const profil = genererProfil(type, longueur, creerAlea(g * 1000 + idx + 500_000));
+    const trace = genererTrace(type, longueur, creerAlea(g * 1000 + idx), profil);
+    const analyse = analyserTrace(trace.route.segments, trace.lacets);
+    lignes.push({
+      graine: g, longueur, trace, analyse, ecart: ecartMinimal(trace.route),
+      lacetsFort: partLacetsEnPenteForte(trace.lacets, profil), ...mesurerClasses(trace, analyse),
+    });
     if (g % 20 === 0) await new Promise((r) => setTimeout(r, 0));
   }
   return lignes;
@@ -110,10 +157,9 @@ describe.each(TYPES_ETAPE)('génération du tracé : %s, 1 000 seeds de 20 à 10
     }
   }, T);
 
-  it('lacets : zones ordonnées dans l\'étape (montagne uniquement)', async () => {
+  it('lacets : zones ordonnées dans l\'étape, jamais en dehors de la montagne', async () => {
     for (const { trace, longueur } of await lignesDe(type)) {
       if (type !== 'montagne') { expect(trace.lacets).toHaveLength(0); continue; }
-      expect(trace.lacets.length).toBeGreaterThanOrEqual(1);
       let fin = 0;
       for (const z of trace.lacets) {
         expect(z.debut_m).toBeGreaterThanOrEqual(fin);
@@ -160,7 +206,7 @@ describe('génération du tracé : comparaison entre types (UF 2.2)', () => {
   it('bornes aux extrémités : 20 km et 250 km pour chaque type', () => {
     for (const type of TYPES_ETAPE) for (const km of [20, 250]) for (const g of [1, 2, 3]) {
       const l = km * 1000;
-      const tr = genererTrace(type, l, creerAlea(g));
+      const tr = tracer(type, l, g);
       expect(ecartsAuxBornes(analyserTrace(tr.route.segments, tr.lacets), type, l)).toEqual([]);
       expect(ecartMinimal(tr.route, 2)).toBeGreaterThanOrEqual(ECART_MIN_M);
     }
@@ -168,12 +214,93 @@ describe('génération du tracé : comparaison entre types (UF 2.2)', () => {
 
   it('déterminisme : même seed, même tracé ; seeds différentes, tracés différents', () => {
     for (const type of TYPES_ETAPE) {
-      const a = genererTrace(type, 60_000, creerAlea(5));
-      const b = genererTrace(type, 60_000, creerAlea(5));
+      const a = tracer(type, 60_000, 5);
+      const b = tracer(type, 60_000, 5);
       expect(b.route.segments).toEqual(a.route.segments);
       expect(b.lacets).toEqual(a.lacets);
-      expect(genererTrace(type, 60_000, creerAlea(6)).route.segments).not.toEqual(a.route.segments);
+      expect(tracer(type, 60_000, 6).route.segments).not.toEqual(a.route.segments);
     }
+  });
+});
+
+describe('tracé conditionné par la pente (UF 2.2b)', () => {
+  const somme = (lignes: Ligne[], cle: 'longueurClasse' | 'droiteClasse' | 'angleClasse' | 'nbViragesClasse', c: ClassePente) =>
+    lignes.reduce((s, l) => s + l[cle][c], 0);
+  const partDroite = (lignes: Ligne[], c: ClassePente) => somme(lignes, 'droiteClasse', c) / Math.max(somme(lignes, 'longueurClasse', c), 1);
+  const angleMoyen = (lignes: Ligne[], c: ClassePente) => (somme(lignes, 'angleClasse', c) / Math.max(somme(lignes, 'nbViragesClasse', c), 1)) * (180 / Math.PI);
+
+  it('lacets : au moins 90 % de leur longueur sur une pente d\'au moins 7 % (montée ou descente), sur chaque étape', async () => {
+    for (const type of TYPES_ETAPE) {
+      const pire = Math.min(...(await lignesDe(type)).map((l) => l.lacetsFort));
+      expect(pire).toBeGreaterThanOrEqual(0.9);
+    }
+  }, 300_000);
+
+  it('des lacets existent en montagne (étapes de 60 km et plus : la grande majorité en ont), et pas ailleurs', async () => {
+    const longues = (await lignesDe('montagne')).filter((l) => l.longueur >= 60_000);
+    expect(longues.filter((l) => l.trace.lacets.length > 0).length / longues.length).toBeGreaterThan(0.9);
+    for (const type of ['plaine', 'vallonne'] as const) {
+      for (const l of await lignesDe(type)) expect(l.trace.lacets).toHaveLength(0);
+    }
+  }, 300_000);
+
+  it('la part de droite décroît avec la pente (faible > moyenne > forte), hors lacets, sur 1 000 seeds', async () => {
+    for (const type of ['vallonne', 'montagne'] as const) {
+      const lignes = await lignesDe(type);
+      expect(partDroite(lignes, 'faible')).toBeGreaterThan(partDroite(lignes, 'moyenne'));
+      expect(partDroite(lignes, 'moyenne')).toBeGreaterThan(partDroite(lignes, 'forte'));
+    }
+  }, 300_000);
+
+  it('l\'angle moyen des virages croît avec la pente (faible < moyenne < forte), hors lacets, sur 1 000 seeds', async () => {
+    for (const type of ['vallonne', 'montagne'] as const) {
+      const lignes = await lignesDe(type);
+      expect(angleMoyen(lignes, 'faible')).toBeLessThan(angleMoyen(lignes, 'moyenne'));
+      expect(angleMoyen(lignes, 'moyenne')).toBeLessThan(angleMoyen(lignes, 'forte'));
+    }
+  }, 300_000);
+
+  it('la pente ne détermine pas le tracé : des lignes droites sur pente forte existent encore', async () => {
+    for (const type of ['vallonne', 'montagne'] as const) {
+      const lignes = await lignesDe(type);
+      expect(somme(lignes, 'droiteClasse', 'forte')).toBeGreaterThan(0.03 * somme(lignes, 'longueurClasse', 'forte'));
+      // et des virages sur pente faible
+      expect(somme(lignes, 'nbViragesClasse', 'faible')).toBeGreaterThan(0);
+    }
+  }, 300_000);
+
+  it('le tracé dépend du profil : mêmes tirages, profils différents, tracés différents', () => {
+    const l = 60_000;
+    const reel = genererProfil('montagne', l, creerAlea(1));
+    const raide = { ...reel, pente: () => 0.1 };
+    const plat = { ...reel, pente: () => 0 };
+    const avecReel = genererTrace('montagne', l, creerAlea(7), reel);
+    const avecRaide = genererTrace('montagne', l, creerAlea(7), raide);
+    const avecPlat = genererTrace('montagne', l, creerAlea(7), plat);
+    expect(avecRaide.route.segments).not.toEqual(avecPlat.route.segments);
+    expect(avecReel.route.segments).not.toEqual(avecPlat.route.segments);
+    expect(avecPlat.lacets).toHaveLength(0); // pas une seule pente forte : pas de lacets
+    expect(avecRaide.lacets.length).toBeGreaterThan(0); // pente forte partout : des lacets
+    // les bornes du tableau restent respectées quel que soit le profil
+    for (const tr of [avecReel, avecRaide, avecPlat]) {
+      expect(ecartsAuxBornes(analyserTrace(tr.route.segments, tr.lacets), 'montagne', l)).toEqual([]);
+      expect(ecartMinimal(tr.route)).toBeGreaterThanOrEqual(ECART_MIN_M);
+    }
+  }, 60_000);
+
+  it('classes de pente : seuils à 3 % et 7 %, en valeur absolue', () => {
+    expect(CLASSES_PENTE).toEqual(['faible', 'moyenne', 'forte']);
+    expect(classePente(0.029)).toBe('faible'); expect(classePente(-0.029)).toBe('faible');
+    expect(classePente(0.03)).toBe('moyenne'); expect(classePente(-0.07)).toBe('moyenne');
+    expect(classePente(0.0701)).toBe('forte'); expect(classePente(-0.12)).toBe('forte');
+  });
+
+  it('le vérificateur de lacets détecte des lacets posés sur du plat', () => {
+    const zones = [{ debut_m: 100, fin_m: 900 }];
+    expect(partLacetsEnPenteForte(zones, { pente: () => 0.02 })).toBe(0);
+    expect(partLacetsEnPenteForte(zones, { pente: () => -0.09 })).toBe(1);
+    expect(partLacetsEnPenteForte(zones, { pente: (s) => (s < 500 ? 0.09 : 0) })).toBeCloseTo(0.5, 2);
+    expect(partLacetsEnPenteForte([], { pente: () => 0 })).toBe(1);
   });
 });
 
@@ -197,7 +324,7 @@ describe('outils de vérification du tracé (cas de violation volontaires)', () 
 
   it('le vérificateur rapide et la force brute concluent pareil (écarts < 3 largeurs identiques, sinon tous deux ≥ 3 largeurs)', () => {
     const cas = [
-      genererTrace('montagne', 20_000, creerAlea(3)).route,
+      tracer('montagne', 20_000, 3).route,
       creerRoute([{ longueur_m: 300, courbure_rad_m: 0 }, { longueur_m: 8 * Math.PI, courbure_rad_m: 1 / 8 }, { longueur_m: 300, courbure_rad_m: 0 }]),
       creerRoute([{ longueur_m: 200, courbure_rad_m: 0 }, { longueur_m: 12 * Math.PI, courbure_rad_m: 1 / 12 }, { longueur_m: 200, courbure_rad_m: 0 }, { longueur_m: 12 * Math.PI, courbure_rad_m: -1 / 12 }, { longueur_m: 200, courbure_rad_m: 0 }]),
     ];

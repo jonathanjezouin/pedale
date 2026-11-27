@@ -226,7 +226,7 @@ Communes aux trois types : variation de pente bornée à 1 point de pente par 10
 - [auto] Résultats identiques à seed identique.
 - [visuel] Profil d'étape à la manière d'un profil de course : on reconnaît un col, une bosse, un plat.
 
-### UF 2.2b — Tracé conditionné par la pente
+### UF 2.2b — Tracé conditionné par la pente  *(réalisée : `generation.ts` reprise, `etapes.ts`, `analyse.ts`, `test/generation.test.ts`, 38 tests au total dans ce fichier)*
 
 **Contenu** : reprise du générateur de tracé de l'UF 2.2 en lui donnant le profil de l'UF 2.3 en entrée. La pente en valeur absolue (montée comme descente, ce sont les mêmes versants) modifie la probabilité de chaque type de bloc. Les bornes globales du tableau de l'UF 2.2 (part de droite, virages par km, angle moyen, rayons, droites longues, non-recroisement, longueur) et leur contrôle en boucle fermée restent inchangés.
 
@@ -239,6 +239,8 @@ Communes aux trois types : variation de pente bornée à 1 point de pente par 10
 | Forte, > 7 % | virages serrés, lacets, droites encore possibles | environ 1 bloc sur 3 (montagne seulement) |
 
 Ce sont des pondérations : aucune classe n'interdit un type de bloc, sauf les lacets hors montagne et hors pente forte. La plaine (pentes < 3 %) se comporte comme à l'UF 2.2.
+
+*Précisions de réalisation.* `genererTrace(type, longueur, alea, profil)` prend désormais le profil de même longueur. Réglages par classe (faible / moyenne / forte) : angle des virages × 0,75 / 1 / 1,35 ; rayon tiré avec l'exposant 0,7 / 1 / 1,5 (grands rayons sur pente faible, petits sur pente forte) ; longueur des droites × 1,4 / 1 / 0,6. Les contrôles en boucle fermée de l'UF 2.2 (part de droite, angle moyen) sont rendus sensibles à la classe : chaque classe vise son propre rapport, seul le niveau d'ensemble est asservi, sans quoi le contrôle effaçait l'effet de la pente (angles par arc de 27°, 28°, 29° au lieu de 22°, 27°, 35° en vallonné). Les droites longues planifiées sont placées de préférence sur pente faible. Lacets : un bloc qui démarre sur pente forte en devient une série avec une probabilité de 1/3, à condition que la pente forte dure assez longtemps devant (4 épingles au moins, 165 m par épingle) et que les lacets ne dépassent pas 12 % de la longueur déjà parcourue, avec 800 m au moins entre deux séries (sans ce plafond, 15 % de la longueur de montagne était en lacets). Les statistiques par classe sont calculées hors lacets : les branches droites des lacets forment une catégorie à part et fausseraient la comparaison.
 
 **Critères**
 - [auto] Tous les critères de l'UF 2.2 (non-recroisement, bornes du tableau, longueur) sont vérifiés tels quels sur 1 000 seeds par type, avec profil.

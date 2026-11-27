@@ -99,3 +99,35 @@ export const PARAMETRES_PROFIL: Readonly<Record<TypeEtape, ParametresProfil>> = 
     colPente_ratio: [0.05, 0.09], colHauteur_m: [300, 1400], descentePente_ratio: [0.04, 0.1],
   },
 };
+
+// — Tracé conditionné par la pente (UF 2.2b) —
+
+/** Seuils de classe de pente, en valeur absolue : faible < 3 %, moyenne de 3 à 7 %, forte > 7 %. */
+export const PENTE_FAIBLE_MAX_RATIO = 0.03;
+export const PENTE_FORTE_MIN_RATIO = 0.07;
+export type ClassePente = 'faible' | 'moyenne' | 'forte';
+export const CLASSES_PENTE: readonly ClassePente[] = ['faible', 'moyenne', 'forte'];
+
+export function classePente(pente_ratio: number): ClassePente {
+  const p = Math.abs(pente_ratio);
+  return p < PENTE_FAIBLE_MAX_RATIO ? 'faible' : p <= PENTE_FORTE_MIN_RATIO ? 'moyenne' : 'forte';
+}
+
+/** Pondérations par classe de pente : jamais des interdits, seulement des probabilités. */
+export interface ReglagePente {
+  /** Facteur sur l'angle d'un virage. */
+  readonly angle: number;
+  /** Exposant sur le tirage du rayon (w = u^γ : γ < 1 favorise les grands rayons, γ > 1 les petits). */
+  readonly rayonGamma: number;
+  /** Facteur sur la longueur des lignes droites. */
+  readonly droite: number;
+}
+export const REGLAGE_PENTE: Readonly<Record<ClassePente, ReglagePente>> = {
+  faible: { angle: 0.75, rayonGamma: 0.7, droite: 1.4 },
+  moyenne: { angle: 1.0, rayonGamma: 1.0, droite: 1.0 },
+  forte: { angle: 1.35, rayonGamma: 1.5, droite: 0.6 },
+};
+/** Probabilité qu'un bloc démarrant sur pente forte soit une série de lacets (montagne). */
+export const PROBA_LACETS_PENTE_FORTE = 1 / 3;
+/** Part minimale de la longueur des lacets qui doit être sur pente forte. */
+export const PART_LACETS_PENTE_FORTE_MIN = 0.9;
