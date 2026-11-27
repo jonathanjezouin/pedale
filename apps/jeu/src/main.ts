@@ -1,5 +1,6 @@
 import { VERSION_SIM, creerSimulation } from '@pedale/sim';
 import { secondes } from './format.ts';
+import { monterVueDefilement } from './defilement/vue.ts';
 import { monterVueEtape } from './etape.ts';
 import { rendrePanneau } from './panneau.ts';
 import './style.css';
@@ -40,7 +41,8 @@ const nav = document.createElement('nav');
 nav.className = 'vues';
 const bVueCoureur = bouton('Coureur témoin', 'Les décisions du coureur', () => afficherVue('coureur'));
 const bVueEtape = bouton('Étape', 'La route : tracé, profil, largeur', () => afficherVue('etape'));
-nav.append(bVueCoureur, bVueEtape);
+const bVueDefilement = bouton('Défilement', 'La route qui défile sous le coureur', () => afficherVue('defilement'));
+nav.append(bVueCoureur, bVueEtape, bVueDefilement);
 const commandes = document.createElement('div');
 commandes.className = 'commandes';
 commandes.append(bPause, bPrec, bSuiv, selVitesse, position);
@@ -49,18 +51,22 @@ const panneau = document.createElement('main');
 panneau.className = 'panneau';
 app.append(entete, panneau);
 const vueEtape = monterVueEtape(app);
+const vueDefilement = monterVueDefilement(app);
 
-type Vue = 'coureur' | 'etape';
+type Vue = 'coureur' | 'etape' | 'defilement';
 let vue: Vue = 'coureur';
 function afficherVue(nom: Vue): void {
   vue = nom;
   panneau.hidden = nom !== 'coureur';
   commandes.hidden = nom !== 'coureur';
   vueEtape.racine.hidden = nom !== 'etape';
+  if (nom !== 'defilement') vueDefilement.fermer();
   bVueCoureur.ariaCurrent = nom === 'coureur' ? 'page' : null;
   bVueEtape.ariaCurrent = nom === 'etape' ? 'page' : null;
+  bVueDefilement.ariaCurrent = nom === 'defilement' ? 'page' : null;
   if (nom === 'etape') vueEtape.ouvrir();
-  else if (location.hash.startsWith('#etape')) history.replaceState(null, '', location.pathname + location.search);
+  else if (nom === 'defilement') vueDefilement.ouvrir();
+  else if (location.hash.startsWith('#etape') || location.hash.startsWith('#defilement')) history.replaceState(null, '', location.pathname + location.search);
 }
 
 function basculerPause(): void {
@@ -100,6 +106,9 @@ let precedent = performance.now();
 function image(maintenant: number): void {
   const dt_s = Math.min((maintenant - precedent) / 1000, 0.1);
   precedent = maintenant;
+  // La simulation du coureur témoin et son panneau ne tournent que dans leur vue : ailleurs, ce serait du travail
+  // (et de la mémoire) pris sur le défilement de la route.
+  if (vue !== 'coureur') { requestAnimationFrame(image); return; }
   if (!enPause) {
     accumule_s += dt_s * vitesse;
     const pas_s = sim.instantane().pas_s;
@@ -110,5 +119,5 @@ function image(maintenant: number): void {
   requestAnimationFrame(image);
 }
 sim.avancer(1); // une première décision à montrer dès l'ouverture
-afficherVue(location.hash.startsWith('#etape') ? 'etape' : 'coureur');
+afficherVue(location.hash.startsWith('#defilement') ? 'defilement' : location.hash.startsWith('#etape') ? 'etape' : 'coureur');
 requestAnimationFrame(image);

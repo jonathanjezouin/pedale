@@ -91,3 +91,15 @@ nav.vues button[aria-current="page"] { background: var(--accent); border-color: 
 .lecture dd { margin: 0; }
 @media (max-width: 900px) { .etape-grille { grid-template-columns: 1fr; } .etape { padding: 12px 16px 40px; } }
 [hidden] { display: none !important; }
+
+/* — Vue Défilement (UF 2.6) — */
+:root { --sol: #8fae68; --herbe: #7e9d58; --buisson: #66864a; --arbre: #4d6e3b; --bas-cote: #c9c29a; --chaussee-sol: #6a6e76; --poteau: #f2f2ee; --poteau-km: #d64a2a; }
+@media (prefers-color-scheme: dark) {
+  :root { --sol: #3d5230; --herbe: #4a6338; --buisson: #35492a; --arbre: #2a3b22; --bas-cote: #6d6b52; --chaussee-sol: #3c4048; --poteau: #d8d8d0; --poteau-km: #ee6a48; }
+}
+.defilement { max-width: 1280px; margin: 0 auto; padding: 16px 24px 48px; }
+.defilement[hidden] { display: none; }
+.scene { position: relative; }
+.cv-defilement { width: 100%; height: min(62vh, 560px); display: block; border: 1px solid var(--trait); border-radius: 8px; background: var(--sol); }
+.hud { position: absolute; left: 10px; top: 10px; margin: 0; padding: 6px 10px; border-radius: 6px; background: color-mix(in srgb, var(--carte) 82%, transparent); color: var(--texte); font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events: none; }
+@media (max-width: 900px) { .defilement { padding: 12px 16px 40px; } }

@@ -285,7 +285,7 @@ Communes : variation de largeur ≤ 0,02 m par m (soit 2 m de moins en 100 m au 
 
 *Vérifié automatiquement dans le navigateur (hors suite de tests, Playwright n'étant pas une dépendance du projet) :* 135 valeurs affichées sur 15 points (3 types, 5 positions) identiques à la lecture directe de la façade mise en forme ; clics sur la carte et le profil, glissé, touches ; « Autre route » et touche N ; rechargement par l'adresse (même étape) ; thème sombre ; largeur de téléphone (390 px) sans débordement ; aucune erreur de console. Captures : `docs/captures/uf-2-5-*.png`.
 
-### UF 2.6 — Défilement graphique robuste
+### UF 2.6 — Défilement graphique robuste  *(réalisée : `apps/jeu/src/defilement/` (camera, blocs, rendu, vue), `tools/mesure-defilement.mjs`, `test/defilement.test.ts`, 16 tests ; en attente de la validation du propriétaire)*
 
 **Contenu** : une caméra suit un point qui avance sur la route, en vue de dessus, sur toute la longueur de l'étape, avec le fond de route, ses bords et un décor minimal. C'est ici que l'on règle le « grattage » rencontré dans le premier POC et que l'on valide ou non le choix de PixiJS.
 
@@ -297,6 +297,26 @@ Communes : variation de largeur ≤ 0,02 m par m (soit 2 m de moins en 100 m au 
 - [visuel] Vidéo d'un défilement en virage et en descente rapide : aucun scintillement ni « grattage » du fond.
 - [valid] Je fais défiler 10 minutes à ×1 puis un col à ×16 : rien d'anormal à l'œil.
 - Décision à prendre dans l'UF et à consigner ici : orientation de la caméra (monde fixe et caméra qui tourne, ou route qui défile vers le haut) et niveau de zoom constant. Les deux sont testées sur les critères ci-dessus, on garde celle qui passe.
+
+**Décisions prises.**
+- **Moteur graphique : Canvas 2D, PixiJS n'est pas nécessaire.** Rien n'est une texture : la route et le décor sont de la géométrie vectorielle ancrée dans le monde, donc rien ne peut « gratter ». Le coût de dessin moyen est de 0,06 à 0,16 ms par image (3,8 ms au pire), sur un navigateur sans carte graphique. Le choix PixiJS du premier POC est donc invalidé pour ce besoin ; à rouvrir si le décor devient très riche (UF 2.7, chantiers suivants).
+- **Zoom constant : 6 px par mètre** (la chaussée de 6 m fait 36 px, l'écran montre environ 200 m de large). Deux zooms de contrôle : ×2 et ×4 (« fort zoom », 24 px/m).
+- **Orientation : les deux sont réalisées, et passent les critères automatiques ; le mode « auto » est le défaut.** « Route vers le haut » (la route est toujours verticale) est naturelle à vitesse normale, mais la caméra tourne : en montagne, à 25 m/s, 62 °/s au pire à ×1, 249 °/s à ×4, **997 °/s au 99e centile à ×16 (3 tours par seconde)**, 4 000 °/s à ×64. « Nord en haut » ne tourne jamais et garde une vitesse apparente constante même dans les virages. Auto : route vers le haut jusqu'à ×4, nord en haut à partir de ×16. Seuil et choix à valider à l'œil (critère `[valid]`).
+
+**Construction.** La route est découpée en blocs de 200 m, construits à la demande et libérés (cache des 96 derniers utilisés). Tout est échantillonné sur une grille absolue de 2 m, en coordonnées locales au bloc : rien ne dépend de la position fractionnaire du point suivi. Chaque bloc est un chemin `Path2D` construit une fois ; à chaque image, seule la matrice de la caméra est calculée (en double précision : les coordonnées 32 bits du canvas trembleraient à 250 km du départ). Les blocs se recouvrent d'un pas de 2 m : sans cela, deux polygones adjacents laissent une couture claire à l'anti-crénelage (vérifié : 283 pixels faux sans recouvrement, 0 avec). Les blocs à dessiner se retrouvent par un index spatial (et non par `s`) : en lacets, on voit des branches de route éloignées en `s`. Le cap de la caméra est une moyenne circulaire sur les 30 m à venir : fonction de la position seule, sans état, donc sans retard ni dérive. Le décor (touffes, buissons, arbres, poteaux d'hectomètre et de kilomètre) est généré par bloc, de façon déterministe, hors chaussée et accotements, y compris des branches voisines de la route en lacets.
+
+**Mesures** (`node tools/mesure-defilement.mjs`, Chromium sans affichage, rapport complet dans `docs/mesures/uf-2-6-defilement.txt`) :
+- *Vitesse apparente* : un repère du sol défile de zoom × vitesse × accélération, à 0,0012 % près (5 304 images en ligne droite, 5 à 25 m/s, ×1 à ×16). **Interprétation retenue du critère** : « positions affichées successives » = position écran d'un repère du sol, divisée par la durée entre les deux images ; « hors virages » = ligne droite sur [−5 m, +190 m] autour du coureur. La position est calculée par le modèle de caméra ; l'image dessinée en est conforme (720 poteaux kilométriques repérés dans les pixels : écart maximal 0,64 px, précision de la mesure).
+- *Durée d'image* : montagne 200 km, 25 m/s, 2 densités d'écran (DPR 1 et 2) × 2 orientations × ×1, ×4, ×16, ×64 : 14 402 images, **0 au-dessus de 20 ms, plus longue 16,8 ms** (la cadence est celle de l'écran, 60 i/s).
+- *Mémoire* : défilement complet de 200 km à ×64 (7 501 images) : tas JavaScript médian 3,90 → 3,95 Mo entre le 2e et le 3e tiers (+1,3 %) ; 96 blocs en cache au plus ; 1 000 blocs construits pour 1 000 blocs de route (aucune reconstruction).
+- *Couverture* : 1,08 million de pixels contrôlés sur 189 positions (12 séries de lacets, frontières de blocs à ±1 m), 2 orientations × 3 zooms : 0 trou, 0 couture. Le test a été vérifié en retirant le recouvrement : il détecte alors les coutures.
+- *Limites* : le critère « 10 minutes de temps réel simulé » est tenu en distance (200 km à ×64 = 2 minutes réelles = 2,3 heures simulées à 25 m/s ; le ×1 est mesuré sur 15 s réelles) ; la mesure tourne sans carte graphique (cas défavorable), mais n'est pas une mesure sur votre matériel.
+
+**Incidents rencontrés et corrigés.** (1) La boucle du coureur témoin (UF 1.5) continuait de simuler et de reconstruire son panneau à chaque image dans toutes les vues, hors de sa vue : +12 Ko/s de mémoire et du temps de calcul volé ; elle ne tourne plus que dans sa vue (la mesure de mémoire détecte cette fuite si on la remet). (2) Au cours des essais, deux images isolées sont sorties au-dessus de 50 ms (50,1 ms et 66,6 ms) sur environ 20 000 images, sans lien avec le ramasse-miettes (3 ms au plus) ni avec le dessin (3,5 ms au plus) ; elles ne se sont pas reproduites sur la mesure complète finale (14 402 images). Cause non établie ; à surveiller sur votre matériel.
+
+**Captures et vidéos** (`docs/captures/uf-2-6-*`) : bandes d'images consécutives en épingle, à une jonction de blocs, à une transition de largeur, et à fort zoom ×4 ; vidéos d'un virage à ×1 (route vers le haut) et d'une descente à ×16 (nord en haut). Les vidéos sont enregistrées à 25 i/s par l'outil : elles ne montrent pas la fluidité réelle (60 i/s) mais le contenu.
+
+**Pour l'essayer** : `npm run dev`, onglet « Défilement » (adresse `#defilement?type=montagne&km=200&graine=1&v=12&k=1&o=auto`). Vitesse de 5 à 25 m/s, temps ×1, ×4, ×16, ×64, caméra, zoom, curseur de position, Espace pour la pause.
 
 ### UF 2.7 — Décor de bord de route (reprise de l'archive)
 

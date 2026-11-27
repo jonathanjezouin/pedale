@@ -1,0 +1,37 @@
+
+1. Couverture de la route (sol magenta, accotements verts, chaussée grise : aucun pixel faux sur la route)
+  OK     aucune couture, aucun trou — 1082695 pixels contrôlés sur 189 positions (dont 12 séries de lacets et les frontières de blocs), 2 orientations × 3 zooms, 0 erreur(s)
+
+2. Position vue d'un poteau kilométrique comparée à la position prédite par la caméra
+  OK     image conforme au modèle — 720 poteaux, écart maximal 0.64 px (précision de la mesure : ~0,5 px), 0 manqué(s)
+
+3. Vitesse apparente d'un repère du sol (plaine, ligne droite sur [−5 m, +190 m] autour du coureur)
+  OK     écart ≤ 5 % — 5304 images en ligne droite, 5 à 25 m/s, ×1 à ×16 : écart maximal 0.0012 %
+
+4. Durée d'image (montagne 200 km, 25 m/s, départ au km 3)
+    DPR 1 cap  ×1  : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.08 max 1.8 ms | blocs construits 11
+    DPR 1 cap  ×4  : 901 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.08 max 0.8 ms | blocs construits 17
+    DPR 1 cap  ×16 : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.10 max 3.0 ms | blocs construits 41
+    DPR 1 cap  ×64 : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.15 max 3.0 ms | blocs construits 129
+    DPR 1 nord ×1  : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.11 max 3.3 ms | blocs construits 10
+    DPR 1 nord ×4  : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.10 max 0.9 ms | blocs construits 16
+    DPR 1 nord ×16 : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.10 max 2.7 ms | blocs construits 40
+    DPR 1 nord ×64 : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.12 max 2.4 ms | blocs construits 128
+    DPR 2 cap  ×1  : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.08 max 1.9 ms | blocs construits 11
+    DPR 2 cap  ×4  : 901 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.09 max 1.6 ms | blocs construits 17
+    DPR 2 cap  ×16 : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.09 max 3.1 ms | blocs construits 41
+    DPR 2 cap  ×64 : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.12 max 3.8 ms | blocs construits 129
+    DPR 2 nord ×1  : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.07 max 1.9 ms | blocs construits 10
+    DPR 2 nord ×4  : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.06 max 0.6 ms | blocs construits 16
+    DPR 2 nord ×16 : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.08 max 2.6 ms | blocs construits 40
+    DPR 2 nord ×64 : 900 images, p50 16.7 p99 16.8 max 16.8 ms | dessin moy 0.14 max 3.7 ms | blocs construits 128
+  OK     99 % des images sous 20 ms — 14402 images, 0 au-dessus de 20 ms (0.000 %)
+  OK     aucune image au-dessus de 50 ms — 0 image(s) au-dessus de 50 ms ; plus longue 16.8 ms ; plus long dessin 3.8 ms
+
+5. Mémoire : défilement de toute l'étape à ×64 (tas JavaScript après ramasse-miettes)
+    7501 images, 200 km parcourus, tas 3.3 3.7 3.8 3.8 3.8 3.8 3.8 4.0 3.9 3.9 3.9 3.9 3.9 3.9 3.9 3.9 3.9 4.0 3.9 3.9 4.0 3.9 4.2 4.0 Mo
+  OK     mémoire stable après stabilisation — tas médian 3.90 → 3.95 Mo entre le 2e et le 3e tiers (1.29 %)
+  OK     cache de blocs borné — 96 blocs en mémoire au plus (limite 96), 1000 construits pour 1000 blocs de route parcourus
+
+7 / 7 critères tenus
+sortie 0

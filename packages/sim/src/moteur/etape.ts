@@ -74,6 +74,10 @@ export interface Etape {
   readonly bilan: BilanEtape;
   lire(s_m: number): LectureEtape;
   bords(s_m: number): BordsEtape;
+  /** Point du plan à l'abscisse `s` et au décalage `d` (positif à gauche), sans toucher à l'étape. */
+  versMonde(s_m: number, d_m: number): Point2D;
+  /** Demi-largeur de chaussée + accotement à l'abscisse `s`. */
+  demiTotale(s_m: number): number;
   echantillonner(pas_m: number): EchantillonsEtape;
 }
 
@@ -136,6 +140,8 @@ export function creerEtape(graine: number, type: TypeEtape, longueur_m: number):
       };
     },
     bords(s_m) { return route2d.bords(s_m); },
+    versMonde(s_m, d_m) { const q = route2d.versMonde(s_m, d_m); return { x_m: q.x_m, y_m: q.y_m }; },
+    demiTotale(s_m) { return route2d.demiTotale_m(s_m); },
     echantillonner(pas_m) {
       const n = Math.max(1, Math.ceil(longueur_m / pas_m));
       const s: number[] = [], x: number[] = [], y: number[] = [], z: number[] = [], c: (0 | 1 | 2)[] = [];
