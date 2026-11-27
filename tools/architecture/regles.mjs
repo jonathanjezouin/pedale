@@ -107,7 +107,7 @@ const SUFFIXES_UNITE = /_(m|s|w|j|kg|rad|m_s|m_s2|rad_m|rad_s|ratio|n)$/;
 
 // Exceptions explicites : l'unité est portée par un champ voisin, pas par le nom du nombre.
 const EXCEPTIONS_UNITE = {
-  'packages/sim/src/contrats/volontes.ts': ['min', 'max'], // Borne : unité = celle de `grandeur`
+  'packages/sim/src/contrats/volontes.ts': ['min', 'max', 'valeur'], // Borne, Visee : unité = celle de `grandeur`
   'packages/sim/src/contrats/trace.ts': ['percu', 'reel'], // EcartPercuReel : unité = champ `unite`
 };
 

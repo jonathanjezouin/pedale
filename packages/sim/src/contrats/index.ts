@@ -5,7 +5,7 @@ export type {
 export type { Observation } from './observation.ts';
 export type { Percu } from './percu.ts';
 export type { Croyances, CroyancesSoi, CroyancesReste, CroyanceAutre } from './croyances.ts';
-export type { NiveauVouloir, GrandeurCadree, Borne, Cadre, Volonte, Volontes } from './volontes.ts';
+export type { NiveauVouloir, GrandeurCadree, Borne, Cadre, Visee, Volonte, Volontes } from './volontes.ts';
 export type { Commandes } from './commandes.ts';
 export type {
   MemoirePercevoir, MemoireInterpreter, MemoireVouloir, MemoireAgir, MemoireCoureur,

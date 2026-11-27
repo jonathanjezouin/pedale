@@ -20,12 +20,20 @@ export interface Borne {
 /** Cadre descendant : ce que le niveau inférieur n'a pas le droit de dépasser. */
 export type Cadre = readonly Borne[];
 
+/** Une valeur voulue pour une grandeur (l'unité est celle de la grandeur : « puissanceVisee_w » = watts). */
+export interface Visee {
+  readonly grandeur: GrandeurCadree;
+  readonly valeur: number;
+}
+
 /** Volonté d'un niveau. */
 export interface Volonte {
   readonly niveau: NiveauVouloir;
   /** Ce qui est voulu, en un nom stable (ex. « rester_dans_le_groupe »). */
   readonly but: string;
   readonly raisons: readonly Raison[];
+  /** Valeurs chiffrées voulues (utile surtout à la Manœuvre, que Agir traduit en Commandes). */
+  readonly visees: readonly Visee[];
   /** Cadre donné au niveau d'en dessous (vide pour la Manœuvre : elle va vers Agir). */
   readonly cadre: Cadre;
   /** Instant de réévaluation prévu (null = seulement sur déclencheur). */
