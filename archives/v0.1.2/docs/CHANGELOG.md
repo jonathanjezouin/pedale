@@ -1,0 +1,132 @@
+# Journal des versions
+
+## v0.1.2 — comportement de groupe
+Conception : `docs/v0.1.2-groupe.md`. Banc d'essai : `npm run groupe`.
+### v0.1.2c — relais par règles individuelles
+- **Fatigue aiguë recalée** : seuil 0,75 × FTP, montée 0,05, descente 0,02 ; seuil personnel de relais `fatigueRelais` (0,35-0,8). Retirés : durée de tour fixe (45 s), `rasLeBol`, `excesRelais`, `dejaRoule`. Ajoutés : « mes jambes chargent : j'ai fait mon tour » pour céder la tête ; prise de tête réservée aux deux premiers de la file, jambes fraîches (sauf en côte).
+- **Hypothèse infirmée** : sans fatigue aiguë les tours ne s'allongent pas, ils raccourcissent (tout le monde veut mener) ; elle régularise le relais.
+- Banc (8 coureurs, fixe / face) : durée médiane d'un tour 108 / 85 s ; tours < 10 s 5 / 2 % ; abri hors tête 33 / 37 % ; sous 10 % d'abri 13 / 6 % ; pertes de roue 14 / 15 ; part du temps en tête 50 % / 0 % (inégal). Étapes (30 × 100 km) : sprinteurs 40 / 17 / 3 %, grimpeurs 10 / 37 / 60 %.
+- Tests : 94 → 98 (4 nouveaux) ; deux seuils ajustés (« aspiration à zéro » : la dispersion sans abri est moindre, le nombre de groupes ne distingue plus les deux cas).
+
+### v0.1.2d — consolidation (v0.1.2 terminée)
+- **Revalidation de 900 étapes** (300 par type, 20 à 250 km) : aucune neutralisée, aucune non terminée, 0 valeur non finie, 0 coureur non arrivé sur 7 200. Décrochages par étape : 19 / 43 / 56 (v0.1.0 : 120 / 183 / 210). Victoires : sprinteurs 21 / 10 / 2 % (21 / 12 / 8), grimpeurs 20 / 42 / 61 % (17 / 34 / 46). Vitesses 38,6 / 35,3 / 31,0 km/h.
+- **Écarts** : cibles du banc non atteintes sur les pertes de roue, l'inégalité des relais, la longueur du groupe et les frôlements ; détail et pistes dans `docs/v0.1.2-groupe.md` §9.1. Grimpeurs plus forts en montagne, sprinteurs presque absents en montagne (2 %) : plausible en cyclisme mais à surveiller.
+- Numéros de version passés à 0.1.2.
+
+### v0.1.2b — agir et suivre
+- **Régulateur de suivi** : écart visé en secondes (écart de confort + 0,045 s de roue à roue), bande morte, amortissement (gain faible dans la bande, plus fort au-delà), vitesse de rapprochement bornée à 1,2 m/s, évitement du contact bruité par l'exécution. À lui seul, effet quasi nul.
+- **Quatre causes structurelles** trouvées au banc : axe de file global (un groupe scindé n'avait plus de roue à suivre), « sans roue on tient la vitesse médiane de la course », freinage à fond sur un coureur à ma hauteur (−6 km/h en 2 s), perdre l'abri sans conséquence dans Vouloir. Corrigées : file par groupe, rejoindre le coureur devant, évitement limité au recouvrement latéral, `abriPerdu` / `retourFaisable` / survie / abandon explicite. Détail : `docs/v0.1.2-groupe.md` §5.1.
+- Banc (8 coureurs, vent fixe / de face) : pertes de roue 19 / 60 → 16 / 14 ; abri hors tête 22 / 30 → 33 / 38 % ; durée médiane d'un tour 42 / 48 → 69 / 58 s. Étapes (30 × 100 km) : groupe de tête à 20 km 5,2 / 6,3 / 4,6 ; décrochages 88 / 33 / 82 par étape (105 / 111 / 129) ; sprinteurs 23 / 33 / 20 %.
+- Tests : trois seuils statistiques ajustés (changements de tête > 8 au lieu de 15, insertions > 8 au lieu de 20, étapes de montagne contre plaine sur 30 seeds) : le groupe reste mieux groupé, donc moins de manœuvres. Diagnostic : la branche d'`agir` qui produit la commande est notée dans `geste.branche`.
+- **Cible v0.1.2b non atteinte** : pertes de roue ≤ 3 par course (16 mesurées). Reste à traiter en v0.1.2c (fatigue aiguë, relais).
+
+### v0.1.2a — banc d'essai et aspiration
+- **Banc d'essai de groupe** (`tools/batch/src/groupe.ts`) : groupes de 4 et 8, plat, vent fixe et de face ; durée des tours, répartition de la tête, vraies pertes de roue, abri, longueur du groupe, frôlements. Le meneur est recalculé depuis les positions (une première mesure fondée sur `meneurId` donnait à tort des tours de 10 s).
+- **État de départ** (8 coureurs, vent fixe) : 19 pertes de roue par course (60 avec vent de face), abri moyen hors tête 22 %, un coureur 45 % du temps en tête et un autre 1 %, 230 frôlements par course.
+- **Aspiration** : cumul de **tous** les sillages (avant : 3), plafond 0,85 (avant 0,48), sillage élargi et allongé, calibré sur des formations (file, triangle, bloc de 8) ; affichage en cône. Clarification : « 5-10 % de la traînée » signifie 90-95 % d'abri sur l'air seulement (le roulement reste) ; pour un groupe compact de 7-9 coureurs la traînée **moyenne** est environ la moitié de celle d'un coureur seul.
+- Effet : abri moyen hors tête 22 → 28 % (30 → 40 % de face) ; pertes de roue inchangées, comme attendu (le suivi est l'objet de la v0.1.2b).
+- Tests : 90 → 94 ; deux tests statistiques élargis (12 seeds pour « aspiration à zéro », 40 étapes par type pour les grimpeurs) : l'aspiration plus forte modifie les trajectoires et ils étaient à la limite.
+
+## v0.1.1 — suivi de roue et fluidité
+Deux remarques de l'utilisateur après la v0.1.0 : des saccades visuelles, et un suiveur qui laisse parfois trop de distance. Mesuré avant de corriger.
+- **Suivi de roue** (`suivre()` dans `action.ts`). Sur 12 courses du POC, 315 000 mesures de suiveurs : écart médian 0,6 m, mais 20,4 % du temps au-delà de 3,5 m (90e centile 8,6 m). *(Classement initial « 73 % à la limite d'effort » : erroné, voir ci-dessous.)* Le régulateur était purement proportionnel, avec le délai de lecture et sans anticipation. Ajouts : **estimation de l'accélération de la roue** (dérivée filtrée de la vitesse perçue) et visée de la vitesse que la roue aura dans le temps de réaction (accélérations seulement : anticiper aussi les ralentissements faisait doubler les passages simultanés en tête) ; **urgence plus précoce** (marge d'effort au-delà du plancher dès 0,8 m d'écart, pleine à 3,5 m ; avant 1 à 5 m), **proportionnelle à la valeur de l'abri** qu'on retrouverait (sans aspiration, rien ne justifie de forcer ; le test « aspiration à zéro » l'a révélé). Résultat : 90e centile 8,6 → 7,6 m, part au-delà de 3,5 m 20,4 → 17,0 %. **Correction (analyse ultérieure, 10 courses du POC + 10 étapes de 80 km)** : les écarts de plus de 3,5 m sont en majorité des **réorganisations du groupe**, pas des pertes de contact : changement de roue 32 %, porte ouverte 21 %, quelqu'un qui s'est glissé 12 % ; relance du meneur 7 %, montée 8 %, autres 19 %. Les **vraies pertes de roue** (contact tenu 5 s puis écart > 6 m) : 17 par course du POC, ~77 par étape de 80 km ; 55 % recollent en 6 à 8 s ; elles arrivent à la 4e place de la file, sur le plat, derrière un meneur qui s'abrite lui-même (effet d'accordéon). La puissance pour tenir la roue est presque toujours dans les moyens du suiveur (0,72 à 0,77 × FTP, au-delà de 1,2 × FTP dans 0 à 3 % des cas) : ce n'est pas un épuisement mais une limite de la commande (régulateur sur une seule roue, effort de 1,2 × FTP au plus pour s'abriter, explosivité de 0,6 à 0,8 inutilisée). Un suiveur qui chasse est à 1,15 × FTP, d'où ma lecture erronée « à la limite ».
+- **Saccades** (mesure en navigateur) : (1) les **tuiles de décor** se dessinaient d'un coup, en vue, 8 à 18 ms chacune (3,5 par seconde à ×4) : elles sont maintenant préparées devant la route (jusqu'à ±42 m, une par image, jamais en même temps qu'une tuile visible) ; 0 tuile dessinée en vue sur 25 s à ×1 et à ×4 (15 et 89 avant) ; (2) les **textures de coureurs** (8 × 4 postures × 12 phases) se créaient à la première apparition d'une posture : créées d'avance par paquets de 12 par image et envoyées au GPU ; (3) le panneau « Pourquoi ? » n'est plus reconstruit toutes les 0,2 s, seulement quand la décision change. Non touché : l'évaluation du profil de l'étape (< 1 ms par kilomètre, ce n'était pas la cause).
+- Équilibres inchangés (30 étapes de 100 km) : grimpeurs 13 / 13 / 43 %, sprinteurs 20 / 20 / 13 %, 0 étape neutralisée ; décrochages en montagne 159 → 129 par étape. POC : rouleur / sprinteur / attaquant / opportuniste 29 / 21 / 28 / 22 %.
+- Tests : 88 → 90. Trois tests statistiquement fragiles ont été stabilisés (échantillon de seeds élargi pour « fin-burst » ; seuil des arrivées serrées 0,5 → 0,4 ; réévaluation forcée dans le test du plancher) : ils échouaient par hasard, pas à cause d'un défaut.
+- Limite : la fluidité n'a pas été mesurée sur une vraie carte graphique (mesure en navigateur sans GPU) ; à confirmer à l'œil.
+
+## v0.1.0 — consolidation
+- **Validation de 3 000 étapes** (1 000 par type, 20 à 250 km) : `docs/v0.1.0-validation.md`. Outil `npm run validation -w @pedale/batch`.
+- **Défaut trouvé et corrigé** : 3,4 % des étapes de montagne (> 220 km) et 0,3 % des vallonnées se bloquaient : huit coureurs arrêtés dans une rampe à 14 % avec de la réserve (traction `P / max(v, 2)` trop faible à l'arrêt). Plancher de vitesse ramené à 1 m/s ; après correction 0 blocage sur 3 000 étapes, 0 coureur non arrivé sur 24 000.
+- **Panneau « Pourquoi ? »** : section « les autres, d'après ce que je vois » (position, disposition, état, danger).
+- **Docs** : `v0.0.1-design-fonctionnel.md` §6 mis à jour (7 intentions, raisons du code, perception limitée, critères), références périmées corrigées.
+- **Électron** : archive Windows (`npm run dist:zip`) construite depuis Linux, application Linux packagée démarrée ; version d'Electron fixée pour `electron-builder`. L'installeur NSIS reste à construire sous Windows.
+- Écarts connus : sprinteurs sous le hasard (21 / 12 / 8 %), rouleurs forts en montagne (31 %). Tests : 87 → 88.
+
+## v0.0.7 — fatigue aiguë, durabilité, mental, équilibrage
+- **Fatigue aiguë** : monte au-dessus du plancher, redescend dessous ; raisons « mes jambes chargent » / « reposées » : la durée d'un tour de relais émerge (changements de tête 60 → 96 par course). Inactive en côte.
+- **Durabilité recalée par mesure** : constat qu'elle n'avait aucun effet en étape (capacité plate tant que `E` > 0,4) ; usure de fond progressive en étape ; `durabilitePct` mesurée sur le modèle (plus de table), seuils recalés.
+- **Sens de la course et sang-froid** : lecture des autres moins bruitée avec le sens ; le bruit monte moins sous pression avec le sang-froid ; affichés dans le panneau.
+- **Équilibrage** : cause du sprinteur faible trouvée (lancement trop tardif) ; POC 32 / 10 / 38 / 20 → 30 / 19 / 26 / 24 %.
+- Contrepartie : la sélection en côte est moins marquée (grimpeurs 47 → 37 % en montagne). Manques listés dans `docs/v0.0.7-fatigue.md` §6. Tests : 80 → 87.
+
+## v0.0.6 — menu de parcours, décor, vent
+- **Menu de parcours** (`P`) : type, distance 20-250 km, finale, seed, décor, avec aperçu (profil, tracé, montées classées, phrase de l'évaluateur) ; le lien reproduit le choix ; il s'ouvre seul sans `seed` ni `etape` dans l'adresse.
+- **Décor** : décor « montagne » ajouté ; décor automatique selon le type d'étape.
+- **Vent d'étape** : direction tirée dans la seed, indépendante du tracé (avant : toujours de face en moyenne) ; POC inchangé.
+- **Profil** : les points des coureurs suivent la courbe d'altitude.
+- Validation (30 étapes de 100 km) : grimpeurs vainqueurs 10 / 40 / 47 % (plate / vallonnée / montagne), 0 étape neutralisée ; allure à plat 34,8 → 38,4 km/h (vent moins souvent de face). Tests : 77 → 80. Détail : `docs/v0.0.6-menu.md`.
+
+## v0.0.5 — pente dans la simulation
+- **Gravité** : la pente entre dans la résistance, la vitesse tenable et le dépassement ; `Road` porte altitude, pente, vitesse maximale en descente (courbure et freinage) et profil d'étape, construits depuis un parcours (`creerRouteDepuisParcours`).
+- **Départ d'étape** : énergie pleine, départ en paquet à 7,5 m/s ; deux régimes d'usure (finale POC inchangée, étape : usure ×6 plus lente et coût réduit sous le plancher) ; durée maximale et fin de simulation garanties.
+- **Perception et interprétation** : pente, pente devant, profil du reste de l'étape (évalué par `evaluer()`, mis en cache par km) ; terrain, col en cours / devant, budget de l'étape ; raisons « budget » et « col ».
+- **Aptitudes** par terrain et **types physiques** calculés ; archétype **grimpeur** et composition d'étape.
+- **Jeu** : `?etape=montagne&km=150`, touche `E`, vitesse ×256, altitude/pente, profil altimétrique. **Outil** : `npm run etapes`.
+- Validation (30 étapes de 100 km) : grimpeurs vainqueurs 10 / 33 / 50 % (plate / vallonnée / montagne), peloton étiré de 5 s (plat) à 241 s (montagne) en côte, 0 étape neutralisée. Défaut trouvé : CdA trop bas des grimpeurs (53 % des étapes plates) ; corrigé. Limites : sprinteur toujours faible, fatigue d'étape distincte (v0.0.7). Détail : `docs/v0.0.5-pente.md`.
+- Tests : 55 → 77 pour la simulation, 33 pour le parcours.
+
+## v0.0.4 — module de parcours
+- **`packages/parcours`** : `genererParcours({ seed, distance, type })` (profil altimétrique et tracé en plan, étape en ligne de 20 à 250 km, plate / vallonnée / montagne, finale tirée selon le type) et **`evaluer(profil, de, à, arrivée)`** (fonction pure : montées détectées et classées HC à 4e, poids selon la distance à l'arrivée, probabilités sprint / puncheur / grimpeur, usure, durée estimée, phrase lisible). Indépendant de la simulation, pas encore branché sur la course.
+- Le nombre d'éléments se déduit du D+ visé donc de la distance (un col sur 20 km, trois ou plus sur 250 km) ; col décisif dans les 40 derniers km en montagne ; pentes bornées, raccords arrondis ; contrôle par l'évaluateur avec retirage (10 essais).
+- Tracé en plan lié au relief : plaine droite et large, vallonné modéré, montagne en lacets doux (rayon ≥ 80 m) ; jamais de recoupement.
+- **Atelier de parcours** (`npm run atelier`, `apps/atelier`) : distance, type, finale, seed → profil coloré par la pente avec les montées classées, tracé vu de dessus, évaluation, et « évaluer le reste de l'étape depuis le km X ».
+- **Validation par lot** (`npm run parcours -- --n 1000`) : 1 000 étapes par type ; 100 % dans les fourchettes de D+/km, 98 à 100 % de conformité au premier tirage, 0 recoupement, 0 pente hors bornes ; 12 s pour 1 000 étapes.
+- Défauts trouvés par la validation : tracés de montagne qui se recoupaient (72 %), cols lus comme deux montées, fond qui amplifiait les montées, erreur d'unité dans la forme des montées.
+- Tests : 33 pour le module (55 pour la simulation). Passage en v0.0.4 (numéros de version, titre de l'interface). Détail : `docs/v0.0.4-parcours.md`.
+
+## v0.0.3
+### v0.0.3d — modèle de sprint
+- **Plafond de sprint à 3 × FTP supprimé** (défaut de la v0.0.3a) : un sprint est borné par `capExplosif` (pointe, explosivité, fatigue), pas par un multiple du FTP. La pointe du sprinteur compte enfin.
+- **Un sprint lancé va au bout** (défaut de la v0.0.3b) : plus d'abandon quand un autre attaque ou quand la distance de sprint calculée rétrécit avec l'explosivité (15 % des sprints étaient abandonnés) ; « je viens déjà d'essayer » ne pénalise plus l'attaque en cours ; « se placer » impossible quand ça part.
+- **Décroissance neuromusculaire** de la puissance maximale au fil du sprint (`SPRINT`), durée de sprint tenable bornée à 18 s.
+- **Marge quand on est suivi** (distance de lancement −25 %), **ne pas courir après un attaquant déjà loin** (raison `avance`), prise de roue empressée pour « suivre ».
+- Batch (300 courses, v0.0.3c → v0.0.3d) : **victoires rouleur / sprinteur / attaquant / opportuniste 31 / 3 / 54 / 11 → 32 / 10 / 38 / 20 %** ; arrivées au sprint (< 2 s) 53 → 75 % ; victoires détachées (> 4 s) 22 → 9 % ; 36,6 km/h, aucune course neutralisée. Le sprinteur reste à ~10 % (voir `v0.0.3-comportement.md` §10).
+- Tests : 49 → 55.
+
+### v0.0.3c — plancher et place au moindre effort
+- **Plancher** : 87 % du FTP (haut de Z3), multiplié par la fraîcheur : l'effort qu'on tient longtemps. Sans raison supplémentaire, on roule à son plancher ; en tête, « garder des forces » n'est plus une raison de refuser un effort qui ne coûte presque rien. L'allure du groupe devient celle du plancher du meneur.
+- **Place au moindre effort** : la place visée `derriere` cible un coureur (le dernier qui roule, la queue, un cran plus loin quand on est à la peine). Remplace « glisser jusqu'à la queue ». « Inconnu » compte comme relayeur.
+- **Porte ouverte** : réflexe d'Agir, celui qui est derrière lève le pied (3 s par fenêtre de 9 s) pour quelqu'un qui se glisse à sa hauteur à la même vitesse. Les insertions au milieu du groupe existent (> 300 sur 20 courses).
+- Groupe de 4 : chacun fait 11 à 21 tours, le rouleur mène le plus, le sprinteur le moins.
+- **Pièges corrigés** : geste de recul abandonné d'emblée pour le premier du groupe, freinage à l'arrêt sur une cible restée derrière, coureur dépassé qui roulait sur la ligne de tête, arrêt total quand tous préféraient s'abriter.
+- Batch (300 courses, v0.0.3b → v0.0.3c) : vitesse 36,5 → 36,6 km/h ; changements de tête 75 → 60 ; séquence en tête 360 → 349 s ; décrochages 8,9 → 12,0 ; part du temps en tête rouleur / sprinteur / attaquant / opportuniste 35 / 10 / 31 / 24 → 38 / 13 / 27 / 23 % ; **victoires 17 / 5 / 67 / 11 → 31 / 3 / 54 / 11 %** ; aucune course neutralisée.
+- Tests : 42 → 49.
+
+### v0.0.3b — perception, intentions finales, relais par l'arrière
+- **Un coureur ne connaît plus les autres, il les déduit** (`observation.ts`) : une fois par seconde il voit les coureurs à portée (45 m devant, 15 m derrière) avec bruit ; il retient qui roule devant, qui accélère fort, et en déduit rouleur / suiveur / inconnu, danger supposé, état apparent. `archetype`, `pointe` et temps de tête des autres ne sont plus accessibles. Sa propre fatigue est ressentie avec bruit et biais. L'attaque d'un rival est perçue (avec délai), plus signalée à tous.
+- **Les 7 intentions finales** : s'abriter, **se placer** (nouveau), **participer**, attaquer, suivre, revenir, gérer. `relais` et `rabattre` disparaissent. Le contrat porte une **place visée** (garder, tête, avant, queue).
+- **Le relais se transmet par l'arrière** : le meneur s'écarte et recule en roue libre, le suivant hérite de la tête et choisit selon ses raisons ; un volontaire peut passer devant un groupe trop lent. Dépassements simultanés : ≈ 12 % du temps de dépassement.
+- **Abri ressenti et compétence d'exécution** : recherche locale de l'abri (a priori grossier, pas latéral, comparaison), écart de confort / précision / délai de réaction dérivés de l'expérience.
+- **Garde-fous techniques** : durée maximale (course neutralisée, comptée par le batch), gestes d'exécution qui n'aboutissent pas déclarés finis.
+- **Atelier de relecture** : `?seed=9&t=1200&pause=1` ouvre une course à un instant donné, en pause. Panneau « pourquoi ? » : dispositions déduites, place visée, effort ressenti.
+- Batch (300 courses, v0.0.3a → v0.0.3b) : orage d'attaques 56 → 0 % ; attaques par course 9,9 → 2,6 ; vitesse moyenne 37,8 → 36,5 km/h ; changements de tête 61 → 75 ; séquence en tête 97 → 360 s ; part du temps en tête rouleur / sprinteur / attaquant / opportuniste 29 / 16 / 29 / 26 → 35 / 10 / 31 / 24 % ; **victoires 14 / 17 / 48 / 22 → 17 / 5 / 67 / 11 %** (déséquilibre du modèle de sprint, voir le plan : v0.0.3c) ; aucune course neutralisée.
+- Tests : 24 → 42 (perception, déduction, abri ressenti, relais par l'arrière, retrait des causes, garde-fou).
+- Passage en v0.0.3 (numéros de version, titre de l'interface).
+
+### v0.0.3a — physique et contrat Vouloir → Agir
+- **Aspiration en cloche** (σ croissant en aval) et **cumul multiplicatif** (3 sillages au plus, plafond 48 %) ; σ0 calé à 0,35 m (écart moyen entre roues 1,41 → 1,51 m sur 40 courses).
+- **FTP partout** : `Profile.cp` devient `Profile.ftp` (le seuil au-dessus duquel l'explosivité se vide) ; zones Z1-Z7 en données (`paliers.ts`), frontière Z4/Z5 à 100 % du FTP.
+- **Contrat `Intent`** : Vouloir choisit l'effort visé (part du FTP, ou « ce qu'il faut pour tenir la roue ») et les limites `effortMax` / `fatigueMax` (fatigue = 1 − E, plus basse quand il reste de la route) ; Agir convertit en watts (`wattsPour`) et **déclare** `limite-atteinte`, `fin-burst`, `rejoint`, `passage-termine`, `roue-perdue`. Agir garde son propre état (`Rider.geste`) et ne modifie plus l'intention.
+- **Générosité et réciprocité retirées** (profil, raisons `reciprocite` / `egoisme` / `genereux`, plancher d'allure de croisière) ; en tête, l'allure plancher est l'effort visé (83 % du FTP).
+- **Groupe** : vue dérivée (`Vue.groupes`), perçue (« groupe de N »). `pointe` normalisée par `POINTE_REF`.
+- Interface : le panneau « pourquoi ? » affiche l'effort ressenti (palier), le groupe, l'effort visé et les limites.
+- Batch (300 courses, avant → après) : durée 32 → 32 min ; changements de tête 54 → 61 ; part du temps en tête rouleur / sprinteur / attaquant / opportuniste 46 / 9 / 27 / 18 → 29 / 16 / 29 / 26 % ; victoires 23 / 21 / 46 / 10 → 14 / 17 / 48 / 22 % ; orage d'attaques 46 → 56 % ; décrochages 7,3 → 9,1 par course ; aucune course bloquée. Les écarts d'équilibre viennent surtout du retrait de la générosité ; ils seront traités avec les attaques en v0.0.3b.
+- Tests : 13 → 24.
+- **Docs reprises et rendues cohérentes** : intentions finales (s'abriter, se placer, participer, attaquer, suivre, revenir, gérer), **FTP** comme seul nom du seuil (plus de `cp` ; frontière Z4/Z5 à 100 % du FTP), **groupe** remis comme vue dérivée, **générosité et réciprocité retirées**, autres coureurs **déduits du comportement seul**, départ en paquet, fourchettes de parcours selon la distance. Plan de développement jusqu'à la v0.1.0 : `docs/v0.1.0-plan.md`.
+- **Attributs** : conception documentée (`docs/v0.0.3-attributs.md`) : niveaux ancrés WorldTour, FTP en W/kg au centre, pas de score affiché, durabilité en % du FTP après 3000 kJ.
+- **Calibration** (`calibration.ts`) : ancrages et niveaux en données ; coureurs du POC recalés WorldTour (FTP 5,4-6,0 W/kg, pointe jusqu'à 1800 W).
+- Rapport batch § 6 : répartition par niveau et profils incohérents. Interface : FTP en W/kg et son niveau ; plus de pourcentages de générosité/agressivité.
+- Spécification de la **génération de parcours** (profil altimétrique, tracé, évaluation d'étape) : `docs/v0.0.3-parcours.md`. Conception seulement, rien n'est codé.
+
+## v0.0.2
+- **Prise de roue plus empressée** : le suiveur vise une roue à ~0,5 m, rattrape plus vite et accepte de dépasser un peu sa puissance soutenable pour reprendre l'abri (jusqu'à +22 %) ; le coureur qui passe devant se rabat plus tôt et dépasse moins fort. Écart moyen entre roues dans la file : 1,32 m → 0,96 m ; 2 s après un relais, médiane 1,6 m → 1,0 m et p90 7,3 m → 3,3 m.
+- **Aspiration** : modèle documenté (`docs/v0.0.2-aspiration.md`), paramètres regroupés dans `ASPIRATION`, **curseur « Aspiration »** (touche `A`) qui affiche le sillage de chaque coureur, « abri x % » dans la liste des coureurs.
+- Plus de lettres ni de pastilles sur la course : seule la lettre du coureur sélectionné.
+- Passage en v0.0.2 (numéros de version, titre de l'interface).
+
+## v0.0.1
+- Cœur de simulation (percevoir / interpréter / vouloir / agir), 7 intentions, raisons nommées, veto, trace « pourquoi ? ».
+- Route qui tourne, vent fixe, placement continu, éventails, silhouettes et public à l'échelle.
+- Huit coureurs sans peloton ni groupe (décision du propriétaire du projet).
+- Caméra sur le coureur sélectionné, flèches gauche/droite par classement.

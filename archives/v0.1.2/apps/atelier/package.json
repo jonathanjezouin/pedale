@@ -1,0 +1,15 @@
+{
+  "name": "@pedale/atelier",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "description": "Pédale — atelier de parcours : page de développement pour régler les fourchettes sans lancer de course",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": { "@pedale/parcours": "*" },
+  "devDependencies": { "vite": "^7.0.0", "typescript": "^5.9.0" }
+}

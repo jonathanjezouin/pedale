@@ -1,6 +1,6 @@
 # Pédale — Chantiers et critères de validation
 
-> Document de pilotage. La vision fonctionnelle reste celle de `archives/v0.0.2-poc/docs/v0.0.1-design-fonctionnel.md`.
+> Document de pilotage. La vision fonctionnelle reste celle de `archives/v0.1.2/docs/v0.0.1-design-fonctionnel.md`.
 > Ici : dans quel ordre on construit, et à quoi on reconnaît qu'une étape est terminée.
 
 ## 1. Méthode
@@ -50,7 +50,7 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 
 ## 4. Chantier 0 — Archivage et socle (fait)
 
-- [x] Tout l'existant déplacé dans `archives/v0.0.2-poc/` avec son historique git, et un README qui explique pourquoi et ce qui est récupérable.
+- [x] Tout l'existant (état de `main` en v0.1.2) déplacé dans `archives/v0.1.2/` avec son historique git, et un README qui explique pourquoi et ce qui est récupérable.
 - [x] Ce document de chantiers.
 - [ ] Squelette de l'appli (workspace, `npm test`, `npm run dev`) : créé dans le chantier 1 (UF 1.1).
 
@@ -254,7 +254,7 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 ## 10. Chantier 6 — Deux coureurs : aspiration
 
 **Critères (à décliner en UF au démarrage)**
-- [auto] La puissance économisée dans la roue d'un autre suit la loi documentée (voir `archives/v0.0.2-poc/docs/v0.0.2-aspiration.md`) en fonction de la distance entre roues, et disparaît au-delà d'une distance donnée.
+- [auto] La puissance économisée dans la roue d'un autre suit la loi documentée (voir `archives/v0.1.2/docs/v0.0.2-aspiration.md`) en fonction de la distance entre roues, et disparaît au-delà d'une distance donnée.
 - [auto] Un suiveur peut rester dans la roue à puissance inférieure à celle du meneur, et un meneur seul garde sa puissance.
 - [auto] Prise de roue : un coureur qui revient sur un autre se place dans son sillage sans oscillation ni dépassement brutal.
 - [visuel] Visualisation du sillage (curseur d'aspiration), cohérente avec les chiffres.

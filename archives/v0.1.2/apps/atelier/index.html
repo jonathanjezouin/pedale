@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Atelier de parcours</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Atelier de parcours</h1>
+    <span class="sous">Pédale · v0.0.4 · profil, tracé et évaluation d'une étape en ligne</span>
+  </header>
+
+  <main>
+    <section class="carte reglages" aria-label="Réglages">
+      <label class="champ">
+        <span>Distance <b id="vDistance"></b></span>
+        <input id="distance" type="range" min="20" max="250" step="5" />
+      </label>
+      <div class="champ">
+        <span>Type d'étape</span>
+        <div class="segments" id="types" role="radiogroup" aria-label="Type d'étape"></div>
+      </div>
+      <label class="champ">
+        <span>Finale</span>
+        <select id="finale"></select>
+      </label>
+      <div class="champ">
+        <span>Seed</span>
+        <div class="ligne">
+          <input id="seed" type="number" min="1" step="1" />
+          <button id="autre" type="button">Autre tirage</button>
+        </div>
+      </div>
+      <div class="champ" id="meta"></div>
+    </section>
+
+    <section class="carte" aria-label="Profil altimétrique">
+      <h2>Profil altimétrique <span class="legende" id="legende"></span></h2>
+      <canvas id="profil" role="img" aria-label="Profil altimétrique de l'étape"></canvas>
+      <div class="curseur">
+        <label for="depuis">Évaluer le reste de l'étape depuis le km <b id="vDepuis"></b></label>
+        <input id="depuis" type="range" min="0" max="100" step="1" value="0" />
+      </div>
+    </section>
+
+    <div class="deux">
+      <section class="carte" aria-label="Tracé en plan">
+        <h2>Tracé en plan <span class="legende">vu de dessus, coloré par la pente</span></h2>
+        <canvas id="trace" role="img" aria-label="Tracé en plan de l'étape"></canvas>
+      </section>
+      <section class="carte" aria-label="Évaluation">
+        <h2>Évaluation</h2>
+        <p id="phrase" class="phrase"></p>
+        <div id="stats" class="stats"></div>
+        <h3>Finale</h3>
+        <div id="finale-barres" class="barres"></div>
+        <h3>Montées</h3>
+        <div class="tableau"><table id="montees"></table></div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "pedale",
+  "private": true,
+  "version": "0.1.2",
+  "description": "Pédale — jeu de cyclisme sur route, vue de dessus, un seul coureur dans le peloton",
+  "workspaces": [
+    "packages/*",
+    "tools/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @pedale/game",
+    "build": "npm run build -w @pedale/game",
+    "test": "npm run test -w @pedale/sim && npm run test -w @pedale/parcours",
+    "typecheck": "npm run typecheck -w @pedale/sim && npm run typecheck -w @pedale/parcours && npm run typecheck -w @pedale/game && npm run typecheck -w @pedale/atelier",
+    "batch": "npm run batch -w @pedale/batch --",
+    "electron": "npm run electron -w @pedale/game",
+    "dist": "npm run dist -w @pedale/game",
+    "parcours": "npm run parcours -w @pedale/batch --",
+    "atelier": "npm run dev -w @pedale/atelier",
+    "etapes": "npm run etapes -w @pedale/batch --",
+    "dist:zip": "npm run dist:zip -w @pedale/game",
+    "groupe": "npm run groupe -w @pedale/batch --"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
