@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error module JavaScript sans déclaration de types
-import { verifierDependances, verifierInterdits } from '../regles.mjs';
+import { verifierDependances, verifierInterdits, verifierUnites } from '../regles.mjs';
 // @ts-expect-error module JavaScript sans déclaration de types
 import { chargerFichiersReels } from '../charger.mjs';
 
@@ -12,6 +12,7 @@ describe('règles de dépendance entre couches', () => {
     expect(fichiers.length).toBeGreaterThan(0);
     expect(verifierDependances(fichiers)).toEqual([]);
     expect(verifierInterdits(fichiers)).toEqual([]);
+    expect(verifierUnites(fichiers)).toEqual([]);
   });
 
   it('accepte les imports autorisés', () => {
@@ -47,5 +48,20 @@ describe('API interdites dans sim', () => {
   it('ignore les commentaires et le code hors de sim', () => {
     expect(verifierInterdits([f('packages/sim/src/monde/a.ts', '// pas de Math.random ici\n/* Date */ export {};')])).toEqual([]);
     expect(verifierInterdits([f('apps/jeu/src/a.ts', 'Date.now();')])).toEqual([]);
+  });
+});
+
+describe('unités dans les contrats', () => {
+  const c = (contenu: string) => [f('packages/sim/src/contrats/x.ts', contenu)];
+  it('refuse une grandeur sans unité', () => {
+    expect(verifierUnites(c('interface A { readonly vitesse: number }')).length).toBe(1);
+    expect(verifierUnites(c('interface A { puissance?: number | null }')).length).toBe(1);
+    expect(verifierUnites(c('interface A { distance_km: number }')).length).toBe(1);
+  });
+  it('accepte une grandeur avec unité SI, et ignore le reste', () => {
+    expect(
+      verifierUnites(c('interface A { readonly vitesse_m_s: number; pente_ratio: number; nb_n: number; nom: string; f(): number }')),
+    ).toEqual([]);
+    expect(verifierUnites([f('packages/sim/src/monde/x.ts', 'const a: number = 1;')])).toEqual([]);
   });
 });

@@ -102,6 +102,29 @@ export function verifierInterdits(fichiers) {
   return violations;
 }
 
+// Toute propriété numérique des contrats porte son unité (SI) dans son nom.
+const SUFFIXES_UNITE = /_(m|s|w|j|kg|rad|m_s|m_s2|rad_m|rad_s|ratio|n)$/;
+
+// Exceptions explicites : l'unité est portée par un champ voisin, pas par le nom du nombre.
+const EXCEPTIONS_UNITE = {
+  'packages/sim/src/contrats/volontes.ts': ['min', 'max'], // Borne : unité = celle de `grandeur`
+  'packages/sim/src/contrats/trace.ts': ['percu', 'reel'], // EcartPercuReel : unité = champ `unite`
+};
+
+export function verifierUnites(fichiers) {
+  const violations = [];
+  for (const { chemin, contenu } of fichiers) {
+    if (!chemin.startsWith(`${SIM_SRC}contrats/`)) continue;
+    const texte = retirerCommentaires(contenu);
+    for (const m of texte.matchAll(/\b([A-Za-z_]\w*)\??\s*:\s*number\b/g)) {
+      if (!SUFFIXES_UNITE.test(m[1]) && !(EXCEPTIONS_UNITE[chemin] ?? []).includes(m[1])) {
+        violations.push(`${chemin} : la grandeur « ${m[1]} » n'a pas d'unité dans son nom (_m, _s, _w, _m_s, _ratio, _n…)`);
+      }
+    }
+  }
+  return violations;
+}
+
 export function verifierTout(fichiers) {
-  return [...verifierDependances(fichiers), ...verifierInterdits(fichiers)];
+  return [...verifierDependances(fichiers), ...verifierInterdits(fichiers), ...verifierUnites(fichiers)];
 }
