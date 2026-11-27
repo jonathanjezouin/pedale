@@ -130,3 +130,12 @@ Statut : **retenu pour démarrer**, à réviser aux chantiers 7 et 8 si l'expér
 3. **Remontée d'impossibilité** : *par défaut*, **immédiate** : dès qu'un niveau constate qu'il ne peut plus respecter son cadre, le niveau juste au-dessus (et lui seul) se réévalue au pas suivant, sans attendre sa cadence normale.
 4. **Point d'injection du joueur** : *par défaut*, un point unique qui accepte soit des Volontés, soit des Commandes. La source externe ne reçoit que Perçu et Croyances. *(l'idée convient, détails à confirmer au chantier 9)*
 5. **Mémoire du coureur** : *par défaut*, **un bloc de mémoire par étage**, passé en entrée et rendu en sortie de la fonction (fonctions pures), et visible dans la trace.
+
+### Précisions apprises en construisant l'UF 1.4
+
+- **Réévaluation d'un niveau** : première fois, échéance atteinte, déclencheur qui vient d'**apparaître** (front montant : un événement qui dure ne redéclenche pas), cadre reçu modifié, ou impossibilité remontée. La cause est écrite en première raison du niveau (`reevaluation:…`).
+- **Remontée** : immédiate, vers le niveau juste au-dessus seulement, au plus une fois par niveau et par pas ; les niveaux en dessous se réévaluent ensuite car leur cadre a pu changer. Seule une impossibilité **nouvelle** remonte.
+- **Impossibilité** : un niveau est impossible quand son cadre ne lui laisse pas de quoi tenir ce qui est voulu, pas quand il est simplement plafonné en cours d'accélération.
+- **Cadre figé entre deux réévaluations** : un niveau supérieur n'est pas recalculé à chaque pas ; le cadre peut donc être un peu périmé, ce qui est voulu (un cadre, pas un ordre).
+- **Valeurs voulues** : une `Volonte` porte des `visees` chiffrées (ex. vitesse visée de l'intention, puissance visée de la manœuvre) ; Agir ne lit que celles de la manœuvre.
+

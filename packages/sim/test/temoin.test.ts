@@ -64,13 +64,13 @@ describe('chaque étage seul, avec des entrées écrites à la main', () => {
     expect(puissanceVisee(r.sortie)).toBeCloseTo(225);
   });
 
-  it('vouloir : la puissance visée reste dans le cadre de l’intention, sinon impossibilité remontée', () => {
-    const c = croyancesA(0, 0); // à l'arrêt, réserve vide : la puissance demandée dépasse le cadre
+  it('vouloir : la puissance visée reste dans le cadre ; si le cadre ne suffit pas, l’impossibilité remonte', () => {
+    const c = croyancesA(0, 0); // à l'arrêt, réserve vide
     const r = vouloir(c, memoire.vouloir);
-    const plafond = c.soi.puissanceSoutenable_w * 1.15;
-    expect(puissanceVisee(r.sortie)).toBeLessThanOrEqual(plafond + 1e-9);
+    expect(puissanceVisee(r.sortie)).toBeLessThanOrEqual(r.sortie.intention.cadre.find((b) => b.grandeur === 'puissanceVisee_w')?.max ?? 0);
     expect(r.sortie.manoeuvre.raisons.map((x) => x.code)).toContain('plafond_du_cadre');
-    expect(r.sortie.manoeuvre.impossibilite?.code).toBe('cadre_puissance_atteint');
+    expect(r.sortie.intention.raisons.map((x) => x.code)).toContain('impossibilite_remontee');
+    expect(r.sortie.objectif.but).toBe('finir_sans_forcer');
   });
 
   it('agir : traduit la manœuvre en commandes', () => {

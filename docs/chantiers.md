@@ -293,4 +293,7 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 
 | Date | UF / chantier | Résultat | Décision / remarque |
 |---|---|---|---|
-| | | | |
+| 2026-11-27 | UF 1.1 | Critères [auto] passés (clone neuf, violation volontaire refusée, générateur seedé, pas de `Math.random`/`Date` dans `sim`) | — |
+| 2026-11-27 | UF 1.2 | Critères [auto] passés ; types relus et validés par le propriétaire | Ajout d'un champ `etage` sur chaque type (sinon `Observation` et `Percu` seraient interchangeables) |
+| 2026-11-27 | UF 1.3 | Critères [auto] passés (étages seuls, état caché, pureté sur 1 000 pas, ordre d'appel) | Ajout de `Visee` aux Volontés : sans elle, Agir ne peut pas produire de Commandes |
+| 2026-11-27 | UF 1.4 | Critères [auto] passés (cadre respecté sur 1 000 tirages, remontée au niveau juste au-dessus, cadences, raisons de chaque niveau dans la trace) | Impossibilité = le cadre ne suffit pas à *tenir* la vitesse visée (pas : la puissance demandée dépasse le plafond) ; seule une impossibilité nouvelle remonte |

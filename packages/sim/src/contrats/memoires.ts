@@ -14,6 +14,8 @@ export interface MemoireInterpreter {
 export interface MemoireVouloir {
   /** Dernières volontés retenues : base de la cadence de réévaluation de chaque niveau. */
   readonly courantes: Volontes | null;
+  /** Événements présents au pas précédent : sert à détecter ceux qui viennent d'apparaître. */
+  readonly evenementsPrecedents: readonly string[];
 }
 
 export interface MemoireAgir {

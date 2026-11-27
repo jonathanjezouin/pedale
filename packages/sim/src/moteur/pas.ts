@@ -26,7 +26,7 @@ export function memoireInitiale(): MemoireCoureur {
   return {
     percevoir: { dernierInstant_s: null },
     interpreter: { dernierInstant_s: null },
-    vouloir: { courantes: null },
+    vouloir: { courantes: null, evenementsPrecedents: [] },
     agir: { dernierInstant_s: null },
   };
 }

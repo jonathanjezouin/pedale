@@ -6,6 +6,7 @@ export type NiveauVouloir = 'objectif' | 'intention' | 'manoeuvre';
 /** Grandeurs qu'un niveau supérieur peut borner pour le niveau inférieur. */
 export type GrandeurCadree =
   | 'puissanceVisee_w'
+  | 'vitesseVisee_m_s'
   | 'positionLateraleVisee_m'
   | 'ecartRoueProche_m'
   | 'abriMinimal_ratio';
@@ -29,6 +30,8 @@ export interface Visee {
 /** Volonté d'un niveau. */
 export interface Volonte {
   readonly niveau: NiveauVouloir;
+  /** Instant de la dernière évaluation de ce niveau (permet de voir quand il s'est réévalué). */
+  readonly evalueeA_s: number;
   /** Ce qui est voulu, en un nom stable (ex. « rester_dans_le_groupe »). */
   readonly but: string;
   readonly raisons: readonly Raison[];
