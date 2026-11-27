@@ -17,3 +17,7 @@ export { PARAMETRES_PROFIL, VARIATION_PENTE_MAX_PAR_M, RAMPE_M_PAR_UNITE_PENTE, 
 export type { TypeTroncon, ParametresProfil } from './etapes.ts';
 export { classePente, CLASSES_PENTE, REGLAGE_PENTE, PENTE_FAIBLE_MAX_RATIO, PENTE_FORTE_MIN_RATIO, PROBA_LACETS_PENTE_FORTE, PART_LACETS_PENTE_FORTE_MIN } from './etapes.ts';
 export type { ClassePente, ReglagePente } from './etapes.ts';
+export { creerLargeur, genererLargeur, creerRoute2D } from './route2d.ts';
+export type { Largeur, TronconLargeur, Route2D, PointProjete, BordsRoute, SurfaceRoute } from './route2d.ts';
+export { ACCOTEMENT_M, VARIATION_LARGEUR_MAX_M_PAR_M, PARAMETRES_LARGEUR } from './etapes.ts';
+export type { ParametresLargeur } from './etapes.ts';

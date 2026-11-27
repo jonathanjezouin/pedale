@@ -249,14 +249,28 @@ Ce sont des pondérations : aucune classe n'interdit un type de bloc, sauf les l
 - [auto] Des pentes fortes en ligne droite existent encore (la pente ne détermine pas le tracé).
 - [visuel] Planche : en montagne, les lacets se placent là où le profil grimpe fort ; les parties plates sont plutôt droites.
 
-### UF 2.4 — Route à deux dimensions : largeur et bords
+### UF 2.4 — Route à deux dimensions : largeur et bords  *(réalisée : `monde/route2d.ts`, paramètres dans `etapes.ts`, `test/route2d.test.ts`, 24 tests)*
 
 **Contenu** : un point sur la route se repère par `(s, d)` : abscisse et décalage latéral. Largeur de la route, accotements. Conversion entre `(s, d)` et le monde.
+
+**Valeurs retenues (proposées au démarrage de l'UF 2.4, à confirmer par le propriétaire).** `d` est positif à gauche dans le sens de la marche (convention du contrat `PositionRoute`). La largeur est celle de la chaussée ; chaque côté porte un accotement de 1,5 m. La largeur varie par tronçons, avec des transitions linéaires entre eux.
+
+| | Plaine | Vallonné | Montagne |
+|---|---|---|---|
+| Largeur de chaussée | 6 à 7 m | 5,5 à 7 m | 4,5 à 6,5 m |
+| Largeur en lacets | n/a | n/a | 4,5 à 5,5 m |
+| Longueur d'un tronçon de largeur | 800 à 4 000 m | 800 à 4 000 m | 800 à 4 000 m |
+
+Communes : variation de largeur ≤ 0,02 m par m (soit 2 m de moins en 100 m au plus) ; accotement 1,5 m de chaque côté, donc demi-largeur totale ≤ 5 m, très en dessous du demi-écart de non-recroisement de l'UF 2.2 (21 m entre axes) et du rayon minimal de lacet (20 m), ce qui garantit que `(s, d)` reste une bijection dans toute la largeur. Les lacets sont plus étroits que le reste de la montagne.
+
+*Précisions de réalisation.* La conversion plan → `(s, d)` est analytique, segment par segment (droite ou arc de cercle), sans itération : l'erreur d'aller-retour est de l'ordre de 10⁻¹¹ m. Un arc de plus d'un demi-tour (les épingles de 165 à 185°) demande de considérer l'angle modulo 2π. Sans indice, toute la route est examinée ; avec un indice de position, seuls les segments à ±400 m le sont (pour suivre un point qui avance). Les zones de lacets sont des contraintes imposées à la génération de largeur : la route est déjà étroite à la première épingle, avec des transitions avant et après la zone, jamais dans la zone.
 
 **Critères**
 - [auto] Aller-retour `(s, d)` → monde → `(s, d)` : erreur < 1 cm sur 10 000 points tirés.
 - [auto] Décalage latéral extérieur d'un virage serré : la conversion reste valide, sans retournement, dans la largeur de route.
-- [auto] Largeur de route définie par tronçon, bornée, sans saut brutal.
+- [auto] Largeur de route définie par tronçon, bornée par type d'étape (tableau), sans saut brutal (variation ≤ 0,02 m par m), couvrant toute l'étape ; en lacets, largeur du tableau.
+- [auto] Chaque point est classé : chaussée (|d| ≤ demi-largeur), accotement (jusqu'à 1,5 m au-delà), hors route.
+- [auto] Déterminisme à seed identique.
 
 ### UF 2.5 — Visualisation du tracé et du profil
 

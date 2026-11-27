@@ -131,3 +131,22 @@ export const REGLAGE_PENTE: Readonly<Record<ClassePente, ReglagePente>> = {
 export const PROBA_LACETS_PENTE_FORTE = 1 / 3;
 /** Part minimale de la longueur des lacets qui doit être sur pente forte. */
 export const PART_LACETS_PENTE_FORTE_MIN = 0.9;
+
+// — Largeur de route (UF 2.4) —
+
+export const ACCOTEMENT_M = 1.5;
+/** Variation maximale de la largeur de chaussée : 0,02 m par mètre. */
+export const VARIATION_LARGEUR_MAX_M_PAR_M = 0.02;
+
+export interface ParametresLargeur {
+  readonly chaussee_m: Fourchette;
+  /** Largeur imposée sur les zones de lacets (montagne). */
+  readonly lacets_m: Fourchette | null;
+  readonly tronconLongueur_m: Fourchette;
+}
+
+export const PARAMETRES_LARGEUR: Readonly<Record<TypeEtape, ParametresLargeur>> = {
+  plaine: { chaussee_m: [6, 7], lacets_m: null, tronconLongueur_m: [800, 4000] },
+  vallonne: { chaussee_m: [5.5, 7], lacets_m: null, tronconLongueur_m: [800, 4000] },
+  montagne: { chaussee_m: [4.5, 6.5], lacets_m: [4.5, 5.5], tronconLongueur_m: [800, 4000] },
+};
