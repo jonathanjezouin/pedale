@@ -1,6 +1,22 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "lib": ["ES2022", "DOM"], "outDir": "../../node_modules/.tmp/jeu", "rootDir": "../..", "tsBuildInfoFile": "../../node_modules/.tmp/jeu.tsbuildinfo" },
-  "include": ["src", "vite.config.ts"],
-  "references": [{ "path": "../../packages/sim" }]
+  "compilerOptions": {
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "outDir": "../../node_modules/.tmp/jeu",
+    "rootDir": "../..",
+    "tsBuildInfoFile": "../../node_modules/.tmp/jeu.tsbuildinfo"
+  },
+  "include": [
+    "src",
+    "test",
+    "vite.config.ts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/sim"
+    }
+  ]
 }

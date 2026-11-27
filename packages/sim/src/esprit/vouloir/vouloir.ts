@@ -66,7 +66,7 @@ export const vouloir: Vouloir = (croyances, memoire) => {
   return {
     sortie,
     memoire: { courantes: sortie, evenementsPrecedents: evenements },
-    resume: `${objectif.but} > ${intention.but} > ${manoeuvre.but} (${visee_w.toFixed(0)} W)`,
+    resume: `${[objectif.but, intention.but, manoeuvre.but].map((b) => b.replaceAll('_', ' ')).join(' › ')} (${visee_w.toFixed(0)} W)`,
     raisons,
   };
 };
