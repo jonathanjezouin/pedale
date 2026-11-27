@@ -152,13 +152,13 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 - [valid] Je peux faire défiler une étape de bout en bout, aux vitesses d'accélération du temps prévues, sans scintillement, saccade ni coupure visible.
 - [auto] Le défilement garde les performances de l'UF 2.6 sur une étape de 200 km.
 
-### UF 2.1 — Géométrie de la route
+### UF 2.1 — Géométrie de la route  *(réalisée : `monde/route.ts`, `test/route.test.ts`, 9 tests)*
 
 **Contenu** : la route est définie par une abscisse curviligne `s` (mètres depuis le départ). À chaque `s` on sait donner : position `(x, y)`, cap, courbure, et le repère local (devant / à gauche).
 
 **Critères**
 - [auto] `position(s)` est continue : l'écart entre `s` et `s + 1 cm` est de 1 cm, à 1 mm près.
-- [auto] Le cap est continu : aucun saut de cap supérieur à 0,01° entre deux points distants de 1 cm.
+- [auto] Le cap est continu : aucun **saut** de cap supérieur à 0,01° entre deux points distants de 1 cm, c'est-à-dire écart au cap attendu (courbure × distance) ≤ 0,01°. *(Précisé en UF 2.1 : la rotation naturelle d'un lacet de 20 m est de 0,029° par centimètre, donc la lettre du critère interdirait tout rayon < 57 m.)*
 - [auto] La longueur totale annoncée correspond à la somme des segments, à 0,1 % près.
 - [auto] `s` croissant implique un avancement le long du tracé, sans retour en arrière ni sur place.
 - [auto] Résultats identiques à seed identique (déterminisme), sur deux exécutions.

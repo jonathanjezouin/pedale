@@ -3,3 +3,5 @@ export { creerMondeTemoin } from './temoin.ts';
 export { observer } from './observation.ts';
 export { appliquerPhysique } from './physique.ts';
 export { PHYSIQUE } from './parametres.ts';
+export { creerRoute } from './route.ts';
+export type { SegmentRoute, DepartRoute, Vecteur, PointRoute, Route } from './route.ts';
