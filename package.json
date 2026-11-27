@@ -1,0 +1,19 @@
+{
+  "name": "pedale",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w @pedale/jeu",
+    "build": "npm run build -w @pedale/jeu",
+    "verifier": "node tools/architecture/cli.mjs",
+    "typecheck": "tsc -b packages/sim apps/jeu",
+    "test": "npm run verifier && npm run typecheck && vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
+  }
+}

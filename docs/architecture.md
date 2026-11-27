@@ -121,10 +121,12 @@ Le point de vigilance : **un coureur seul (chantiers 3 à 5) utilise déjà la c
 - Une constante magique dans la logique.
 - Un « cas particulier » dans `moteur` pour un type de coureur : l'individualité vient des paramètres, pas du code.
 
-## 8. Questions ouvertes (à trancher dans le chantier 1)
+## 8. Décisions du chantier 1
 
-1. **Nombre de niveaux de Vouloir** : trois (Objectif, Intention, Manœuvre) dès le début, ou deux au départ ?
-2. **Cadre descendant** : forme exacte (contraintes sur Commandes, sur états, ou les deux) ?
-3. **Remontée d'impossibilité** : immédiate ou à la prochaine échéance du niveau supérieur ?
-4. **Point d'injection du joueur** : au niveau Intention, Manœuvre ou Commandes, ou librement aux trois ?
-5. **Mémoire du coureur** : où est-elle rangée (par étage ou un bloc unique) ?
+Statut : **retenu pour démarrer**, à réviser aux chantiers 7 et 8 si l'expérience l'exige. Les points marqués « par défaut » n'ont pas été tranchés en profondeur : on a pris le choix le plus simple et le moins coûteux à changer.
+
+1. **Niveaux de Vouloir** : trois (Objectif, Intention, Manœuvre) dès le début. *(décidé)*
+2. **Cadre descendant** : *par défaut*, un cadre est une liste de **bornes simples** sur des grandeurs que le niveau inférieur produit ou observe (ex. « puissance visée ≤ X W », « écart à la roue la plus proche ≤ 10 m »). Le niveau inférieur choisit librement à l'intérieur ; un test peut vérifier qu'il n'en sort jamais.
+3. **Remontée d'impossibilité** : *par défaut*, **immédiate** : dès qu'un niveau constate qu'il ne peut plus respecter son cadre, le niveau juste au-dessus (et lui seul) se réévalue au pas suivant, sans attendre sa cadence normale.
+4. **Point d'injection du joueur** : *par défaut*, un point unique qui accepte soit des Volontés, soit des Commandes. La source externe ne reçoit que Perçu et Croyances. *(l'idée convient, détails à confirmer au chantier 9)*
+5. **Mémoire du coureur** : *par défaut*, **un bloc de mémoire par étage**, passé en entrée et rendu en sortie de la fonction (fonctions pures), et visible dans la trace.
