@@ -10,5 +10,6 @@ export type { Commandes } from './commandes.ts';
 export type {
   MemoirePercevoir, MemoireInterpreter, MemoireVouloir, MemoireAgir, MemoireCoureur,
 } from './memoires.ts';
-export type { DonneeEtage, EntreeTrace, EcartPercuReel, TraceDecision } from './trace.ts';
+export type { DonneeEtage, EntreeTrace, EcartPercuReel, SourceDecision, TraceDecision } from './trace.ts';
+export type { EntreePilote, ReponsePilote, Pilote } from './pilote.ts';
 export type { Resultat, Percevoir, Interpreter, Vouloir, Agir } from './etages.ts';

@@ -26,9 +26,13 @@ export interface EcartPercuReel {
   readonly reel: number;
 }
 
+/** Qui a décidé : l'IA, ou une source externe (qui a fourni des Volontés ou directement des Commandes). */
+export type SourceDecision = 'ia' | 'pilote_volontes' | 'pilote_commandes';
+
 /** Trace d'une décision complète d'un coureur à un instant. */
 export interface TraceDecision {
   readonly coureurId: CoureurId;
+  readonly source: SourceDecision;
   readonly instant_s: number;
   readonly percevoir: EntreeTrace;
   readonly interpreter: EntreeTrace;

@@ -52,5 +52,6 @@ ul { margin: 0; padding-left: 18px; }
 .but { font-weight: 600; font-size: 16px; margin: 4px 0; }
 .cause { background: var(--neuf-fond); color: var(--neuf); padding: 4px 8px; border-radius: 4px; font-size: 13px; margin: 4px 0; }
 .impossibilite { background: var(--alerte-fond); color: var(--alerte); padding: 4px 8px; border-radius: 4px; font-size: 13px; margin-top: 6px; }
+.bandeau-pilote { background: var(--alerte-fond); color: var(--alerte); padding: 8px 12px; border-radius: 6px; margin: 0 0 16px; }
 .vide { color: var(--discret); }
 @media (max-width: 640px) { header { padding: 12px 16px; } .panneau { padding: 16px; } }

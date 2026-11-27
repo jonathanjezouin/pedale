@@ -2,7 +2,7 @@
 // `@ts-expect-error` doivent provoquer une erreur de type, sinon la compilation échoue.
 import { describe, expect, it } from 'vitest';
 import type {
-  Agir, Commandes, Croyances, Interpreter, Observation, Percevoir, Percu, Vouloir, Volontes,
+  Agir, Commandes, Croyances, EntreePilote, Interpreter, Observation, Percevoir, Percu, Pilote, Vouloir, Volontes,
 } from '../src/contrats/index.ts';
 
 declare const observation: Observation;
@@ -16,6 +16,7 @@ declare const interpreter: Interpreter;
 declare const vouloir: Vouloir;
 declare const agir: Agir;
 declare const memoire: never;
+declare const commandesDe: (c: Commandes) => Commandes;
 declare const alea: { suivant(): number };
 
 describe('contrats des étages', () => {
@@ -43,7 +44,13 @@ describe('contrats des étages', () => {
       percevoir(commandes, memoire, alea);
       // @ts-expect-error l'Observation ne peut pas être passée pour un Perçu
       const faux: Percu = observation;
-      return faux;
+      // @ts-expect-error un pilote ne reçoit pas le monde : l'entrée n'a pas de champ « monde »
+      const espion: Pilote = (e: EntreePilote) => e.monde;
+      // @ts-expect-error un pilote ne reçoit pas l'Observation : seulement Perçu et Croyances
+      const triche: Pilote = (e: EntreePilote) => commandesDe(e.observation);
+      // @ts-expect-error un pilote ne peut pas répondre par un Perçu
+      const mauvaiseReponse: Pilote = (e: EntreePilote) => e.percu;
+      return [faux, espion, triche, mauvaiseReponse];
     };
     expect(typeof mauvais).toBe('function');
   });

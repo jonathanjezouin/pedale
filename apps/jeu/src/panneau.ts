@@ -99,6 +99,11 @@ export function rendrePanneau(cible: HTMLElement, t: TraceDecision | undefined):
     el('h2', null, 'Pourquoi ?'),
     el('p', 'sous-titre', `Décision du coureur « ${t.coureurId} » à t = ${secondes(t.instant_s)}`),
   );
+  if (t.source !== 'ia') {
+    cible.append(el('p', 'bandeau-pilote', t.source === 'pilote_commandes'
+      ? 'Décision d’une source externe : elle a fourni directement des commandes (Vouloir contourné).'
+      : 'Décision d’une source externe : elle a fourni des volontés, traduites en commandes par Agir.'));
+  }
   const grille = el('div', 'grille');
   ETAGES.forEach((def, i) => {
     grille.append(etage(def, i + 1, t[def.nom]));

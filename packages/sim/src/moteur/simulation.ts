@@ -1,4 +1,4 @@
-import type { CoureurId } from '../contrats/index.ts';
+import type { CoureurId, Pilote } from '../contrats/index.ts';
 import { creerJournal, type JournalTraces } from '../trace/index.ts';
 import { pas, type Dependances } from './pas.ts';
 import { creerPartieTemoin, DEPENDANCES_TEMOIN } from './temoin.ts';
@@ -26,26 +26,34 @@ export interface Simulation {
   avancer(nbPas_n: number): void;
   readonly journal: JournalTraces;
   instantane(): Instantane;
+  /** Confie (ou reprend, avec `null`) les décisions d'un coureur à une source externe. */
+  definirPilote(coureurId: CoureurId, pilote: Pilote | null): void;
 }
 
 export interface OptionsSimulation {
   readonly capaciteJournal_n?: number;
   readonly dependances?: Dependances;
+  readonly pilotes?: ReadonlyMap<CoureurId, Pilote>;
 }
 
 export function creerSimulation(graine: number, options: OptionsSimulation = {}): Simulation {
   const dep = options.dependances ?? DEPENDANCES_TEMOIN;
   const journal = creerJournal(options.capaciteJournal_n ?? 2000);
   let partie = creerPartieTemoin(graine);
+  const pilotes = new Map<CoureurId, Pilote>(options.pilotes ?? dep.pilotes ?? []);
 
   return {
     journal,
     avancer(nbPas_n) {
       for (let i = 0; i < nbPas_n; i++) {
-        const r = pas(partie, dep);
+        const r = pas(partie, { ...dep, pilotes });
         partie = r.partie;
         for (const trace of r.traces) journal.enregistrer(trace);
       }
+    },
+    definirPilote(coureurId, pilote) {
+      if (pilote) pilotes.set(coureurId, pilote);
+      else pilotes.delete(coureurId);
     },
     instantane: () => ({
       instant_s: partie.monde.instant_s,
