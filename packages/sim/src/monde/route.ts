@@ -109,8 +109,8 @@ export function creerRoute(segments: readonly SegmentRoute[], depart: DepartRout
   };
 }
 
-/** Pose après avoir parcouru `d` mètres à courbure constante `k` : formule exacte, stable pour k → 0. */
-function avancer(p: { x: number; y: number; cap: number }, k: number, d: number): { x: number; y: number; cap: number } {
+/** Pose (x, y, cap) après avoir parcouru `d` mètres à courbure constante `k` : formule exacte, stable pour k → 0. */
+export function avancer(p: { x: number; y: number; cap: number }, k: number, d: number): { x: number; y: number; cap: number } {
   const demi = (k * d) / 2;
   const corde = d * sinc(demi);
   const capMilieu = p.cap + demi;

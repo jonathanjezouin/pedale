@@ -163,7 +163,7 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 - [auto] `s` croissant implique un avancement le long du tracé, sans retour en arrière ni sur place.
 - [auto] Résultats identiques à seed identique (déterminisme), sur deux exécutions.
 
-### UF 2.2 — Génération du tracé
+### UF 2.2 — Génération du tracé  *(réalisée : `monde/etapes.ts`, `analyse.ts`, `generation.ts`, `test/generation.test.ts`, 30 tests)*
 
 **Contenu** : générer un tracé réaliste de route à partir d'une seed et d'un type d'étape (plaine, vallonné, montagne, éventuellement littoral). Virages larges, enchaînements, lacets de col, lignes droites de longueur variable.
 
@@ -176,6 +176,25 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 - [auto] Longueur demandée respectée à 1 % près, pour des étapes de 20 à 250 km.
 - [auto] Distribution des virages (nombre par km, angle moyen) différente et stable d'un type à l'autre, sur 1 000 seeds.
 - [visuel] Planche de 12 tracés : aucun ne ressemble à une courbe lissée artificielle ou à un zigzag aléatoire, et chacun montre des lignes droites franches entre les virages.
+
+**Valeurs retenues (validées par le propriétaire au démarrage de l'UF 2.2).** Ce tableau fait foi pour les critères ci-dessus.
+
+*Définitions.* Ligne droite : tronçon de rayon > 5 km (le générateur produit des droites exactes). Virage : suite continue d'arcs tournant dans le même sens ; on mesure son angle total. Lacet : virage d'environ 180°, rayon de 20 à 30 m, enchaîné par 4 à 10 en alternant gauche et droite (montagne seulement, en montée : lien avec l'UF 2.3). Largeur de route : 7 m (à confirmer à l'UF 2.4). Non-recroisement : deux points distants de plus de 100 m en `s` restent séparés d'au moins 3 largeurs = 21 m en plan. Littoral : écarté pour l'instant, à rouvrir comme UF à part si besoin. Raccords en clothoïde : non, courbure par paliers (à revoir si l'UF 2.6 ou le chantier 3 montre un à-coup).
+
+| | Plaine | Vallonné | Montagne |
+|---|---|---|---|
+| Rayon min. hors lacet | 150 m | 80 m | 40 m |
+| Rayon min. en lacet | n/a | n/a | 20 m |
+| Droites minimales | ≥ 3 de ≥ 1 km par 50 km (proportionnel, au moins 1) | ≥ 1 de ≥ 500 m | ≥ 1 de ≥ 200 m |
+| Part de longueur en droite | 30 à 60 % | 15 à 40 % | 5 à 25 % |
+| Plus longue droite | ≤ 5 km | ≤ 2 km | ≤ 1 km |
+| Virages par km (hors lacets) | 0,5 à 2 | 1,5 à 4 | 3 à 6 |
+| Angle moyen d'un virage | 15 à 40° | 25 à 60° | 40 à 90° |
+| Lacets | aucun | aucun | autorisés |
+
+Les fourchettes de virages par km et d'angles (vallonné, montagne) sont provisoires : à ajuster sur la planche de 12 tracés.
+
+*Précisions de réalisation.* « 1 000 seeds par type » = 1 000 seeds de 20 à 100 km, plus 30 seeds de 100 à 250 km par type, plus les extrêmes 20 km et 250 km contrôlés à pas fin (le coût du contrôle croît avec la longueur ; la suite complète dure environ 1 minute). Le générateur construit bloc par bloc (droite + virage, ou série de lacets), refuse tout bloc qui frôle le tracé existant (marge d'échantillonnage de 4 m) et recule de quelques blocs en cas d'impasse. Il expose les zones de lacets pour que l'UF 2.3 y place les montées. Les tests vérifient le non-recroisement avec un contrôle indépendant du générateur, lui-même validé contre une force brute et sur des cas de violation volontaires.
 
 ### UF 2.3 — Profil d'étape
 
