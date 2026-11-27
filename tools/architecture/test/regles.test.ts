@@ -25,6 +25,16 @@ describe('règles de dépendance entre couches', () => {
     ).toEqual([]);
   });
 
+  it('accepte ce qu’un étage a le droit d’importer', () => {
+    expect(
+      verifierDependances([
+        f('packages/sim/src/esprit/vouloir/niveaux.ts', "import type { X } from '../../contrats/index.ts'; import { T } from '../parametres.ts'; import { b } from './cadre.ts';"),
+        f('packages/sim/src/esprit/index.ts', "export { vouloir } from './vouloir/index.ts'; export { agir } from './agir/index.ts';"),
+        f('packages/sim/src/moteur/b.ts', "import { agir, vouloir } from '../esprit/index.ts';"),
+      ]),
+    ).toEqual([]);
+  });
+
   it.each([
     ['monde importe esprit', 'packages/sim/src/monde/a.ts', "import { e } from '../esprit/index.ts';"],
     ['esprit importe monde', 'packages/sim/src/esprit/a.ts', "import { m } from '../monde/index.ts';"],
@@ -36,6 +46,10 @@ describe('règles de dépendance entre couches', () => {
     ['application importe esprit (chemin relatif)', 'apps/jeu/src/a.ts', "import { e } from '../../../packages/sim/src/esprit/index.ts';"],
     ['la porte d’entrée de sim exporte monde', 'packages/sim/src/index.ts', "export * from './monde/index.ts';"],
     ['dossier hors des couches prévues', 'packages/sim/src/divers/a.ts', 'export {};'],
+    ['agir importe vouloir', 'packages/sim/src/esprit/agir/a.ts', "import { vouloir } from '../vouloir/index.ts';"],
+    ['vouloir importe agir', 'packages/sim/src/esprit/vouloir/a.ts', "import { agir } from '../agir/agir.ts';"],
+    ['interpréter importe percevoir (sans extension)', 'packages/sim/src/esprit/interpreter/a.ts', "import { percevoir } from '../percevoir';"],
+    ['import dynamique entre étages', 'packages/sim/src/esprit/percevoir/a.ts', "const m = await import('../interpreter/index.ts');"],
   ])('refuse : %s', (_nom, chemin, contenu) => {
     expect(verifierDependances([f(chemin, contenu)]).length).toBeGreaterThan(0);
   });

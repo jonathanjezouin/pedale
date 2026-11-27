@@ -56,6 +56,19 @@ function cibleDe(chemin, specifieur) {
   return 'externe';
 }
 
+// Les quatre étages de l'esprit sont étanches entre eux (architecture.md §1) : un fichier d'un étage
+// ne peut importer que son propre dossier, `contrats/` et `esprit/parametres.ts`.
+const ETAGE_ESPRIT = /^packages\/sim\/src\/esprit\/(percevoir|interpreter|vouloir|agir)(\/|$)/;
+const PARAMETRES_ESPRIT = 'packages/sim/src/esprit/parametres.ts';
+
+export function etageEspritDe(chemin) {
+  return ETAGE_ESPRIT.exec(chemin)?.[1] ?? null;
+}
+
+function cheminCible(chemin, specifieur) {
+  return path.normalize(path.join(path.dirname(chemin), specifieur));
+}
+
 export function verifierDependances(fichiers) {
   const violations = [];
   for (const { chemin, contenu } of fichiers) {
@@ -78,6 +91,14 @@ export function verifierDependances(fichiers) {
       }
       if (!AUTORISATIONS[source].includes(cible)) {
         violations.push(`${chemin} : la couche « ${source} » ne peut pas importer « ${cible} » ('${spec}')`);
+        continue;
+      }
+      if (source === 'esprit' && cible === 'esprit' && spec.startsWith('.')) {
+        const etage = etageEspritDe(chemin);
+        const cibleChemin = cheminCible(chemin, spec);
+        if (etage !== null && etageEspritDe(cibleChemin) !== etage && !cibleChemin.startsWith(PARAMETRES_ESPRIT.replace(/\.ts$/, ''))) {
+          violations.push(`${chemin} : l'étage « ${etage} » ne peut pas importer un autre étage de l'esprit ('${spec}')`);
+        }
       }
     }
   }

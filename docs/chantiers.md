@@ -52,7 +52,7 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 
 - [x] Tout l'existant (état de `main` en v0.1.2) déplacé dans `archives/v0.1.2/` avec son historique git, et un README qui explique pourquoi et ce qui est récupérable.
 - [x] Ce document de chantiers.
-- [ ] Squelette de l'appli (workspace, `npm test`, `npm run dev`) : créé dans le chantier 1 (UF 1.1).
+- [x] Squelette de l'appli (workspace, `npm test`, `npm run dev`) : créé dans le chantier 1 (UF 1.1).
 
 ---
 
@@ -122,6 +122,23 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 **Critères**
 - [auto] Un coureur piloté par un script de Commandes et un coureur IA produisant les mêmes Commandes ont exactement la même trajectoire.
 - [auto] La source externe ne reçoit que Perçu et Croyances, jamais l'état réel.
+
+### Note de fin de chantier 1 (version 0.1.0)
+
+**Fait.** Une structure unique en cinq couches (`contrats`, `monde`, `esprit`, `trace`, `moteur`) et une application qui n'en lit que la porte d'entrée. Un coureur témoin traverse la chaîne percevoir > interpréter > vouloir > agir sur une piste droite, avec un Vouloir à trois niveaux (cadre descendant, remontée d'impossibilité, cadences propres), une trace complète de chaque décision, un journal borné, un panneau « pourquoi ? » et un point d'injection pour le joueur.
+
+**Chiffres de validation** (`npm test`, 76 tests) :
+- règles de dépendance entre couches et entre les quatre étages, `Math.random`/`Date` interdits dans `sim`, unités dans les noms : tout est vérifié par script, chaque règle avec son cas de violation volontaire ;
+- cadre respecté sur 1 000 tirages aléatoires ; pureté des étages vérifiée sur 1 000 pas ;
+- journal borné sur 100 000 pas ; mêmes traces à ×1, ×10 et ×64 ;
+- un pilote rejouant les Commandes ou les Volontés de l'IA reproduit exactement sa trajectoire sur 400 pas.
+
+**Validé par le propriétaire.** Les types (UF 1.2), la capture du panneau (UF 1.5), les questions de `architecture.md` §8 et le chantier.
+
+**À retenir.**
+- Les décisions 2, 3, 4 et 5 de `architecture.md` §8 sont des choix par défaut, à réviser aux chantiers 7, 8 et 9.
+- Les mutations volontaires (casser une règle pour voir si le test l'attrape) ont attrapé tous les défauts introduits ; elles ont aussi révélé trois défauts du Vouloir, corrigés (voir le journal).
+- De l'archive : seule la vision fonctionnelle sert de référence. Aucun code n'a été repris ; le décor de bord de route (UF 2.7) sera le premier emprunt.
 
 ---
 

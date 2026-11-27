@@ -47,6 +47,8 @@ apps/jeu/       affichage, interface, entrées clavier : lit des instantanés, n
 | `moteur` | tout de `sim` | `apps` |
 | `apps` | `contrats`, `moteur` (via instantané) | `monde`, `esprit` en écriture |
 
+**Étanchéité des étages** (vérifiée aussi) : dans `esprit/`, chaque dossier d'étage (`percevoir/`, `interpreter/`, `vouloir/`, `agir/`) ne peut importer que `contrats/`, son propre dossier et `esprit/parametres.ts`. Seul `moteur/` les assemble.
+
 Autres règles communes :
 - **Pas de `Math.random` ni de `Date`** dans `sim` : le hasard vient d'un générateur seedé passé en paramètre.
 - **Pas fixe** (par exemple 0,25 s). L'accélération du temps enchaîne plusieurs pas par image ; le résultat ne doit pas dépendre du nombre d'images.
