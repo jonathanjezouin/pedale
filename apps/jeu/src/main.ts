@@ -1,5 +1,6 @@
 import { VERSION_SIM, creerSimulation } from '@pedale/sim';
 import { secondes } from './format.ts';
+import { monterVueEtape } from './etape.ts';
 import { rendrePanneau } from './panneau.ts';
 import './style.css';
 
@@ -34,14 +35,33 @@ position.className = 'position';
 
 const entete = document.createElement('header');
 const titre = document.createElement('h1');
-titre.textContent = `Pédale — coureur témoin (sim ${VERSION_SIM})`;
+titre.textContent = `Pédale (sim ${VERSION_SIM})`;
+const nav = document.createElement('nav');
+nav.className = 'vues';
+const bVueCoureur = bouton('Coureur témoin', 'Les décisions du coureur', () => afficherVue('coureur'));
+const bVueEtape = bouton('Étape', 'La route : tracé, profil, largeur', () => afficherVue('etape'));
+nav.append(bVueCoureur, bVueEtape);
 const commandes = document.createElement('div');
 commandes.className = 'commandes';
 commandes.append(bPause, bPrec, bSuiv, selVitesse, position);
-entete.append(titre, commandes);
+entete.append(titre, nav, commandes);
 const panneau = document.createElement('main');
 panneau.className = 'panneau';
 app.append(entete, panneau);
+const vueEtape = monterVueEtape(app);
+
+type Vue = 'coureur' | 'etape';
+let vue: Vue = 'coureur';
+function afficherVue(nom: Vue): void {
+  vue = nom;
+  panneau.hidden = nom !== 'coureur';
+  commandes.hidden = nom !== 'coureur';
+  vueEtape.racine.hidden = nom !== 'etape';
+  bVueCoureur.ariaCurrent = nom === 'coureur' ? 'page' : null;
+  bVueEtape.ariaCurrent = nom === 'etape' ? 'page' : null;
+  if (nom === 'etape') vueEtape.ouvrir();
+  else if (location.hash.startsWith('#etape')) history.replaceState(null, '', location.pathname + location.search);
+}
 
 function basculerPause(): void {
   enPause = !enPause;
@@ -54,6 +74,7 @@ function aller(delta: number): void {
 }
 
 addEventListener('keydown', (e) => {
+  if (vue !== 'coureur') return;
   if (e.key === ' ') { e.preventDefault(); basculerPause(); }
   else if (e.key === 'ArrowLeft') aller(-1);
   else if (e.key === 'ArrowRight') aller(1);
@@ -89,4 +110,5 @@ function image(maintenant: number): void {
   requestAnimationFrame(image);
 }
 sim.avancer(1); // une première décision à montrer dès l'ouverture
+afficherVue(location.hash.startsWith('#etape') ? 'etape' : 'coureur');
 requestAnimationFrame(image);

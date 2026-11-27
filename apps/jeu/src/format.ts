@@ -105,3 +105,37 @@ export function lignesDonnee(d: DonneeEtage): string[] {
       return [[d.objectif.but, d.intention.but, d.manoeuvre.but].map((b) => b.replaceAll('_', ' ')).join(' › ')];
   }
 }
+
+// — Vue « Étape » (UF 2.5) —
+
+/** Pente signée, une décimale : « +5,2 % », « −8,0 % ». */
+export function penteSignee(ratio: number): string {
+  const v = Math.abs(ratio) * 100;
+  const signe = Math.round(v * 10) === 0 ? '' : ratio > 0 ? '+' : '−';
+  return `${signe}${nf(v, 1)} %`;
+}
+
+export const altitude = (m: number): string => `${nf(m, 0)} m`;
+export const largeurRoute = (m: number): string => `${nf(m, 1)} m`;
+
+/** Cap en degrés, 0° = est, positif vers la gauche (sens trigonométrique), ramené à [0, 360[. */
+export function capDegres(rad: number): string {
+  const d = ((((rad * 180) / Math.PI) % 360) + 360) % 360;
+  return `${nf(d, 0)}°`;
+}
+
+/** Courbure lisible : « ligne droite » ou « virage à gauche, rayon 85 m ». */
+export function courbureLisible(rayon_m: number | null, courbure_rad_m: number): string {
+  if (rayon_m === null) return 'ligne droite';
+  const cote = courbure_rad_m > 0 ? 'gauche' : 'droite';
+  return `virage à ${cote}, rayon ${rayon_m >= 1000 ? nf(rayon_m / 1000, 1) + ' km' : nf(rayon_m, 0) + ' m'}`;
+}
+
+export const NOMS_TYPE_ETAPE: Record<string, string> = { plaine: 'Plaine', vallonne: 'Vallonné', montagne: 'Montagne' };
+export const NOMS_TRONCON: Record<string, string> = { plat: 'plat', bosse: 'bosse', col: 'col', descente: 'descente' };
+export const NOMS_CLASSE_PENTE: Record<string, string> = { faible: 'faible (< 3 %)', moyenne: 'moyenne (3 à 7 %)', forte: 'forte (> 7 %)' };
+
+/** Distance du curseur : mètres sous le kilomètre, sinon kilomètres avec deux décimales. */
+export function positionKm(m: number): string {
+  return `${nf(m / 1000, 2)} km`;
+}

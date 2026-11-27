@@ -272,7 +272,7 @@ Communes : variation de largeur ≤ 0,02 m par m (soit 2 m de moins en 100 m au 
 - [auto] Chaque point est classé : chaussée (|d| ≤ demi-largeur), accotement (jusqu'à 1,5 m au-delà), hors route.
 - [auto] Déterminisme à seed identique.
 
-### UF 2.5 — Visualisation du tracé et du profil
+### UF 2.5 — Visualisation du tracé et du profil  *(réalisée : `moteur/etape.ts` (façade), `apps/jeu/src/etape.ts`, `test/etape.test.ts`, 5 tests ; en attente de la validation du propriétaire)*
 
 **Contenu** : dans l'appli, une vue carte de l'étape entière et un profil d'altitude, avec un curseur qui balaie la route (position, altitude, pente, courbure affichées).
 
@@ -280,6 +280,10 @@ Communes : variation de largeur ≤ 0,02 m par m (soit 2 m de moins en 100 m au 
 - [visuel] La vue carte montre toute l'étape à l'échelle ; le curseur et le profil sont synchronisés.
 - [visuel] Les valeurs affichées (pente, courbure) correspondent aux tests de 2.1 à 2.3 sur 5 points choisis.
 - [valid] Je peux générer une route avec seed et type d'étape, la regarder, et en régénérer une autre en une action.
+
+*Précisions de réalisation.* L'application ne peut pas importer `monde/` (règle d'architecture) : elle lit l'étape par une façade, `creerEtape(graine, type, longueur)`, dans `moteur/`, qui assemble profil, tracé et largeur et expose `lire(s)`, `bords(s)` et `echantillonner(pas)`, en lecture seule. La vue (onglet « Étape », adresse `#etape?type=montagne&km=100&graine=3`) contient la carte de toute l'étape (route colorée par classe de pente, lacets en surépaisseur sombre, départ, arrivée, échelle), le profil (tronçons colorés, zones de lacets), une loupe de 260 m autour du curseur (chaussée, accotements, axe, sens de la marche) et un panneau de lecture (position, altitude, pente, classe de pente, tronçon, courbure, cap, largeur, lacets, coordonnées). Le curseur se déplace en cliquant ou en glissant sur la carte ou le profil, avec le curseur de défilement, ou au clavier (← → : 100 m, Maj : 1 km, Alt : 10 m, Début/Fin). « Autre route » (ou la touche N) tire une nouvelle graine et régénère en une action (environ 40 ms pour 100 km, 60 ms pour 250 km) ; l'adresse permet de retrouver et de partager une étape. Dessin en Canvas 2D : le choix PixiJS se tranche à l'UF 2.6.
+
+*Vérifié automatiquement dans le navigateur (hors suite de tests, Playwright n'étant pas une dépendance du projet) :* 135 valeurs affichées sur 15 points (3 types, 5 positions) identiques à la lecture directe de la façade mise en forme ; clics sur la carte et le profil, glissé, touches ; « Autre route » et touche N ; rechargement par l'adresse (même étape) ; thème sombre ; largeur de téléphone (390 px) sans débordement ; aucune erreur de console. Captures : `docs/captures/uf-2-5-*.png`.
 
 ### UF 2.6 — Défilement graphique robuste
 
