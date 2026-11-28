@@ -6,5 +6,5 @@ export { creerSimulation } from './simulation.ts';
 export type { Simulation, Instantane, OptionsSimulation } from './simulation.ts';
 export { creerEtape, TYPES_ETAPE } from './etape.ts';
 export type {
-  Etape, LectureEtape, BordsEtape, EchantillonsEtape, BilanEtape, TronconEtape, ZoneEtape, Point2D, ClassePente, TypeEtape, TypeTroncon,
+  Etape, LectureEtape, BordsEtape, ProjectionEtape, EchantillonsEtape, BilanEtape, TronconEtape, ZoneEtape, Point2D, ClassePente, TypeEtape, TypeTroncon,
 } from './etape.ts';

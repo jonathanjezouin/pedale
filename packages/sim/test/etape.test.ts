@@ -101,3 +101,22 @@ describe('étape : façade de lecture (UF 2.5)', () => {
     }
   }, 60_000);
 });
+
+describe('étape : projection d\'un point du plan sur la route (UF 2.7)', () => {
+  it('retrouve l\'abscisse, le décalage et la distance au bord ; renvoie null loin de la route', () => {
+    const e = creerEtape(5, 'montagne', 40_000);
+    for (const [s, d] of [[1000, 0], [8000, 1.5], [15_000, -2.9], [20_000, 4.5], [30_000, -9]] as [number, number][]) {
+      const q = e.versMonde(s, d);
+      const p = e.projeter(q.x_m, q.y_m);
+      expect(p).not.toBeNull();
+      if (!p) continue;
+      expect(p.s_m).toBeCloseTo(s, 6);
+      expect(p.d_m).toBeCloseTo(d, 6);
+      expect(p.bord_m).toBeCloseTo(Math.abs(d) - e.demiTotale(s), 6);
+      expect(p.cap_rad).toBeCloseTo(e.lire(s).cap_rad, 9);
+    }
+    const loin = e.versMonde(5000, 40);
+    expect(e.projeter(loin.x_m, loin.y_m)).toBeNull();
+    expect(e.projeter(1e7, 1e7)).toBeNull();
+  });
+});

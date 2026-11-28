@@ -122,6 +122,7 @@ console.log('\n5. Mémoire : défilement de toute l\'étape à ×64 (tas JavaScr
   const croissance = t3 / t2 - 1;
   console.log(`    ${m.intervalles_ms.length} images, ${((m.s_fin_m - m.s_debut_m) / 1000).toFixed(0)} km parcourus, tas ${pts.map((x) => x.toFixed(1)).join(' ')} Mo`);
   verdict('mémoire stable après stabilisation', croissance <= 0.05, `tas médian ${t2.toFixed(2)} → ${t3.toFixed(2)} Mo entre le 2e et le 3e tiers (${(100 * croissance).toFixed(2)} %)`);
+  verdict('cache de cellules de décor borné', Math.max(...m.cellulesEnCache) <= 96, `${Math.max(...m.cellulesEnCache)} cellules en mémoire au plus (limite 96)`);
   verdict('cache de blocs borné', Math.max(...m.blocsEnCache) <= 96, `${Math.max(...m.blocsEnCache)} blocs en mémoire au plus (limite 96), ${m.construits} construits pour ${Math.ceil(m.s_fin_m / 200)} blocs de route parcourus`);
   await page.close();
 }

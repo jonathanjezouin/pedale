@@ -2,4 +2,4 @@
 export * from './contrats/index.ts';
 export * from './trace/index.ts';
 export * from './moteur/index.ts';
-export const VERSION_SIM = '0.1.0';
+export const VERSION_SIM = '0.2.7';

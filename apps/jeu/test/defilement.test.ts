@@ -5,8 +5,12 @@ import {
 } from '../src/defilement/camera.ts';
 import { ecrireReglagesDefilement, lireReglagesDefilement } from '../src/defilement/vue.ts';
 import {
-  CacheRecent, DECOR_PORTEE_M, IndexSpatial, PAS_M, TAILLE_BLOC_M, construireBloc, nombreBlocs, type GeometrieBloc,
+  BORD_PORTEE_M, CacheRecent, IndexSpatial, PAS_M, TAILLE_BLOC_M, construireBloc, nombreBlocs, type GeometrieBloc,
 } from '../src/defilement/blocs.ts';
+import { BIOMES, CLES_BIOME, biomeAuto, biomeEffectif } from '../src/defilement/biomes.ts';
+import { BARRIERE_M, genererBord } from '../src/defilement/bord.ts';
+import { TAILLE_CELLULE_M, cellulesProches, construireCellule } from '../src/defilement/ambiance.ts';
+import { SUR_LA_ROUTE, rayonItem, type Item } from '../src/defilement/items.ts';
 
 describe('caméra du défilement (UF 2.6)', () => {
   it('route vers le haut : un point devant le coureur apparaît juste au-dessus de lui, quel que soit le cap', () => {
@@ -79,11 +83,13 @@ describe('caméra du défilement (UF 2.6)', () => {
 
 describe('blocs de route et décor (UF 2.6)', () => {
   const etape = creerEtape(3, 'montagne', 60_000);
+  const bord = genererBord(etape.graine, etape.longueur_m, BIOMES.montagne);
+  const bloc = (e: typeof etape, i: number) => construireBloc(e, i, genererBord(e.graine, e.longueur_m, BIOMES.montagne), BIOMES.montagne);
   const monde = (b: GeometrieBloc, i: number, tab: Float32Array) => ({ x: b.origineX_m + (tab[2 * i] as number), y: b.origineY_m + (tab[2 * i + 1] as number) });
 
   it('les bords des blocs sont ceux de la route : chaussée et accotements aux bonnes distances, à 0,1 mm près', () => {
     for (const indice of [0, 17, 99, 150, 299]) {
-      const b = construireBloc(etape, indice);
+      const b = bloc(etape, indice);
       for (const i of [0, 1, 37, 50, b.n - 1]) {
         const s = Math.min(indice * TAILLE_BLOC_M + i * PAS_M, etape.longueur_m);
         const bd = etape.bords(s);
@@ -97,7 +103,7 @@ describe('blocs de route et décor (UF 2.6)', () => {
 
   it('aucune couture : le dernier échantillon d\'un bloc recouvre le deuxième du suivant, au même point', () => {
     for (const indice of [0, 40, 120, 250]) {
-      const a = construireBloc(etape, indice), b = construireBloc(etape, indice + 1);
+      const a = bloc(etape, indice), b = bloc(etape, indice + 1);
       for (const [ta, tb] of [[a.chausseeG, b.chausseeG], [a.chausseeD, b.chausseeD], [a.accotementG, b.accotementG], [a.accotementD, b.accotementD]] as const) {
         const pa = monde(a, a.n - 1, ta), pb = monde(b, 1, tb);
         expect(Math.hypot(pa.x - pb.x, pa.y - pb.y)).toBeLessThan(1e-4);
@@ -107,45 +113,14 @@ describe('blocs de route et décor (UF 2.6)', () => {
 
   it('coordonnées locales petites (quelle que soit la distance au départ) ; blocs identiques à graine identique', () => {
     for (const indice of [0, 150, 299]) {
-      const a = construireBloc(etape, indice), b = construireBloc(etape, indice);
+      const a = bloc(etape, indice), b = bloc(etape, indice);
       const max = Math.max(...a.accotementG.map(Math.abs), ...a.accotementD.map(Math.abs));
       expect(max).toBeLessThan(TAILLE_BLOC_M + 30);
-      expect(b.decor).toEqual(a.decor);
+      expect(b.items).toEqual(a.items);
       expect(Array.from(b.chausseeG)).toEqual(Array.from(a.chausseeG));
     }
-    expect(construireBloc(creerEtape(4, 'montagne', 60_000), 20).decor).not.toEqual(construireBloc(etape, 20).decor);
-  });
-
-  it('décor : jamais sur la chaussée ni sur les accotements, ni sur une branche voisine de la route (lacets compris)', () => {
-    let nb = 0, pire = Infinity;
-    for (const indice of [3, 12, 15, 16, 30, 77, 120, 201]) { // plusieurs blocs, dont des blocs en lacets
-      const b = construireBloc(etape, indice);
-      expect(b.decor.length).toBeGreaterThan(20);
-      const s0 = indice * TAILLE_BLOC_M;
-      for (const e of b.decor) {
-        const x = b.origineX_m + e.x_m, y = b.origineY_m + e.y_m;
-        // contrôle indépendant : au mètre, sur ±1 000 m (plus large que la fenêtre de rejet du générateur)
-        for (let s = Math.max(0, s0 - 1000); s <= Math.min(etape.longueur_m, s0 + 1200); s += 1) {
-          const q = etape.versMonde(s, 0);
-          pire = Math.min(pire, Math.hypot(x - q.x_m, y - q.y_m) - etape.demiTotale(s) - e.rayon_m);
-        }
-        nb++;
-      }
-    }
-    expect(nb).toBeGreaterThan(500);
-    expect(pire).toBeGreaterThan(0); // l'élément le plus proche ne touche pas la route (accotements compris)
-  });
-
-  it('décor : porté à 55 m de l\'axe au plus', () => {
-    const b = construireBloc(etape, 30);
-    for (const e of b.decor) {
-      let min = Infinity;
-      for (let s = 6000 - 100; s <= 6000 + 300; s += 1) {
-        const q = etape.versMonde(s, 0);
-        min = Math.min(min, Math.hypot(b.origineX_m + e.x_m - q.x_m, b.origineY_m + e.y_m - q.y_m));
-      }
-      expect(min).toBeLessThanOrEqual(DECOR_PORTEE_M + 12);
-    }
+    expect(bloc(creerEtape(4, 'montagne', 60_000), 20).items).not.toEqual(bloc(etape, 20).items);
+    expect(bord.zones.length).toBeGreaterThan(5);
   });
 
   it('index spatial : aucun bloc dont la route passe dans le disque n\'est oublié', () => {
@@ -185,7 +160,7 @@ describe('blocs de route et décor (UF 2.6)', () => {
     let maxTaille = 0;
     for (let s = 0; s <= etape.longueur_m; s += 25) {
       const p = etape.versMonde(s, 0);
-      for (const b of index.blocsProches(p.x_m, p.y_m, rayon)) cache.prendre(b, () => { construits++; return construireBloc(etape, b); });
+      for (const b of index.blocsProches(p.x_m, p.y_m, rayon)) cache.prendre(b, () => { construits++; return bloc(etape, b); });
       maxTaille = Math.max(maxTaille, cache.taille);
     }
     expect(maxTaille).toBeLessThanOrEqual(64);
@@ -203,12 +178,13 @@ describe('choix de la caméra et adresse (UF 2.6)', () => {
   });
 
   it('adresse : lecture et écriture des réglages, valeurs hors bornes ou inconnues ignorées', () => {
-    const r = lireReglagesDefilement('#defilement?type=plaine&km=120&graine=77&v=20&k=16&o=nord&z=4');
-    expect(r).toEqual({ type: 'plaine', km: 120, graine: 77, vitesse_m_s: 20, acceleration: 16, orientation: 'nord', zoom: 4 });
+    const r = lireReglagesDefilement('#defilement?type=plaine&km=120&graine=77&v=20&k=16&o=nord&z=4&b=desert');
+    expect(r).toEqual({ type: 'plaine', km: 120, graine: 77, vitesse_m_s: 20, acceleration: 16, orientation: 'nord', zoom: 4, biome: 'desert' });
     expect(lireReglagesDefilement(ecrireReglagesDefilement(r))).toEqual(r);
-    const d = lireReglagesDefilement('#defilement?type=marais&km=5000&graine=-3&v=99&k=7&o=haut&z=3');
+    const d = lireReglagesDefilement('#defilement?type=marais&km=5000&graine=-3&v=99&k=7&o=haut&z=3&b=jungle');
     expect(d).toEqual(lireReglagesDefilement('#defilement')); // tout est retombé sur les valeurs par défaut
     expect(d.orientation).toBe('auto');
+    expect(d.biome).toBe('auto');
     expect(d.km).toBe(200);
   });
 });

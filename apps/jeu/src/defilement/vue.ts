@@ -1,12 +1,13 @@
 // Vue « Défilement » (UF 2.6) : une caméra suit un point qui avance sur la route, en vue de dessus, sur toute l'étape.
 import { TYPES_ETAPE, creerEtape, type Etape, type TypeEtape } from '@pedale/sim';
 import { altitude, NOMS_TYPE_ETAPE, penteSignee, positionKm } from '../format.ts';
+import { biomeEffectif, BIOMES, CLES_BIOME, type ChoixBiome } from './biomes.ts';
 import { orientationEffective, type ChoixOrientation, type Orientation } from './camera.ts';
 import { Rendu, type InfoImage } from './rendu.ts';
 
-interface Reglages { graine: number; type: TypeEtape; km: number; vitesse_m_s: number; acceleration: number; orientation: ChoixOrientation; zoom: number }
+interface Reglages { graine: number; type: TypeEtape; km: number; vitesse_m_s: number; acceleration: number; orientation: ChoixOrientation; zoom: number; biome: ChoixBiome }
 
-const DEFAUT: Reglages = { graine: 1, type: 'montagne', km: 200, vitesse_m_s: 12, acceleration: 1, orientation: 'auto', zoom: 1 };
+const DEFAUT: Reglages = { graine: 1, type: 'montagne', km: 200, vitesse_m_s: 12, acceleration: 1, orientation: 'auto', zoom: 1, biome: 'auto' };
 const ZOOM_DE_BASE_PX_M = 6;
 const ACCELERATIONS = [1, 4, 16, 64];
 
@@ -23,11 +24,12 @@ export function lireReglagesDefilement(hash: string): Reglages {
   const k = nombre('k'); if (k !== null && ACCELERATIONS.includes(k)) r.acceleration = k;
   const z = nombre('z'); if (z !== null && [1, 2, 4].includes(z)) r.zoom = z;
   const o = p.get('o'); if (o === 'cap' || o === 'nord' || o === 'auto') r.orientation = o;
+  const b = p.get('b'); if (b === 'auto' || (CLES_BIOME as readonly string[]).includes(b ?? '')) r.biome = b as ChoixBiome;
   return r;
 }
 
 export function ecrireReglagesDefilement(r: Reglages): string {
-  return `#defilement?type=${r.type}&km=${r.km}&graine=${r.graine}&v=${r.vitesse_m_s}&k=${r.acceleration}&o=${r.orientation}&z=${r.zoom}`;
+  return `#defilement?type=${r.type}&km=${r.km}&graine=${r.graine}&v=${r.vitesse_m_s}&k=${r.acceleration}&o=${r.orientation}&z=${r.zoom}&b=${r.biome}`;
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, classe?: string, texte?: string): HTMLElementTagNameMap[K] => {
@@ -46,6 +48,8 @@ export interface Mesure {
   vitesseAttendue_px_s: number;
   /** Blocs en cache à chaque image, et nombre de blocs construits au total. */
   blocsEnCache: number[];
+  /** Cellules de décor en cache à chaque image. */
+  cellulesEnCache: number[];
   construits: number;
   imagesSansTroue?: number;
   s_debut_m: number;
@@ -65,12 +69,13 @@ export function monterVueDefilement(parent: HTMLElement): VueDefilement {
   const inVitesse = el('input'); inVitesse.type = 'number'; inVitesse.min = '5'; inVitesse.max = '25'; inVitesse.step = '1';
   const selAccel = el('select'); for (const a of ACCELERATIONS) selAccel.append(new Option(`×${a}`, String(a)));
   const selOrientation = el('select'); selOrientation.append(new Option('Auto (route en haut jusqu\'à ×4)', 'auto'), new Option('Route vers le haut', 'cap'), new Option('Nord en haut', 'nord'));
+  const selBiome = el('select'); selBiome.append(new Option('Décor : auto (selon le type)', 'auto')); for (const k of CLES_BIOME) selBiome.append(new Option(BIOMES[k].nom, k));
   const selZoom = el('select'); selZoom.append(new Option('Zoom normal', '1'), new Option('Zoom ×2', '2'), new Option('Fort zoom ×4', '4'));
   const bGenerer = el('button', undefined, 'Générer'); bGenerer.type = 'submit';
   const bAutre = el('button', undefined, 'Autre route'); bAutre.type = 'button';
   const bPause = el('button', undefined, 'Pause'); bPause.type = 'button'; bPause.title = 'Espace';
   form.append(champ('Type', selType), champ('Longueur (km)', inKm), champ('Graine', inGraine), champ('Vitesse (m/s)', inVitesse), champ('Temps', selAccel),
-    champ('Caméra', selOrientation), champ('Zoom', selZoom), bGenerer, bAutre, bPause);
+    champ('Caméra', selOrientation), champ('Zoom', selZoom), champ('Décor', selBiome), bGenerer, bAutre, bPause);
   const canvas = el('canvas', 'cv-defilement'); canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', 'Vue de dessus de la route qui défile');
   const hud = el('pre', 'hud');
   const curseur = el('input', 'curseur'); curseur.type = 'range'; curseur.min = '0'; curseur.step = '10'; curseur.setAttribute('aria-label', 'Position le long de la route');
@@ -94,24 +99,26 @@ export function monterVueDefilement(parent: HTMLElement): VueDefilement {
   function generer(r: Reglages): void {
     reglages = { ...r };
     selType.value = r.type; inKm.value = String(r.km); inGraine.value = String(r.graine); inVitesse.value = String(r.vitesse_m_s);
-    selAccel.value = String(r.acceleration); selOrientation.value = r.orientation; selZoom.value = String(r.zoom);
+    selAccel.value = String(r.acceleration); selOrientation.value = r.orientation; selZoom.value = String(r.zoom); selBiome.value = r.biome;
     etape = creerEtape(r.graine, r.type, r.km * 1000);
-    rendu = new Rendu(canvas, etape, { orientation: orientationEffective(r.orientation, r.acceleration), zoom_px_m: ZOOM_DE_BASE_PX_M * r.zoom, controle: false });
+    rendu = new Rendu(canvas, etape, { orientation: orientationEffective(r.orientation, r.acceleration), zoom_px_m: ZOOM_DE_BASE_PX_M * r.zoom, controle: false, biome: biomeEffectif(r.biome, r.type) });
     curseur.max = String(Math.floor(etape.longueur_m));
     s_m = 0; dernierT = null;
     history.replaceState(null, '', ecrireReglagesDefilement(r));
   }
   function appliquerOptions(): void {
     if (!rendu) return;
-    reglages = { ...reglages, vitesse_m_s: Math.min(25, Math.max(5, Number(inVitesse.value) || DEFAUT.vitesse_m_s)), acceleration: Number(selAccel.value), orientation: selOrientation.value as ChoixOrientation, zoom: Number(selZoom.value) };
-    rendu.options = { ...rendu.options, orientation: orientationEffective(reglages.orientation, reglages.acceleration), zoom_px_m: ZOOM_DE_BASE_PX_M * reglages.zoom };
+    reglages = { ...reglages, vitesse_m_s: Math.min(25, Math.max(5, Number(inVitesse.value) || DEFAUT.vitesse_m_s)), acceleration: Number(selAccel.value), orientation: selOrientation.value as ChoixOrientation, zoom: Number(selZoom.value), biome: selBiome.value as ChoixBiome };
+    const biomeAvant = rendu.options.biome;
+    rendu.options = { ...rendu.options, biome: biomeEffectif(reglages.biome, reglages.type), orientation: orientationEffective(reglages.orientation, reglages.acceleration), zoom_px_m: ZOOM_DE_BASE_PX_M * reglages.zoom };
+    if (rendu.options.biome !== biomeAvant) rendu.rafraichirPalette();
     history.replaceState(null, '', ecrireReglagesDefilement(reglages));
   }
-  for (const c of [inVitesse, selAccel, selOrientation, selZoom]) c.addEventListener('change', appliquerOptions);
+  for (const c of [inVitesse, selAccel, selOrientation, selZoom, selBiome]) c.addEventListener('change', appliquerOptions);
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     generer({ ...reglages, type: selType.value as TypeEtape, km: Math.min(250, Math.max(20, Math.round(Number(inKm.value) || DEFAUT.km))), graine: Math.max(0, Math.floor(Number(inGraine.value) || 0)),
-      vitesse_m_s: Math.min(25, Math.max(5, Number(inVitesse.value) || DEFAUT.vitesse_m_s)), acceleration: Number(selAccel.value), orientation: selOrientation.value as ChoixOrientation, zoom: Number(selZoom.value) });
+      vitesse_m_s: Math.min(25, Math.max(5, Number(inVitesse.value) || DEFAUT.vitesse_m_s)), acceleration: Number(selAccel.value), orientation: selOrientation.value as ChoixOrientation, zoom: Number(selZoom.value), biome: selBiome.value as ChoixBiome });
   });
   bAutre.addEventListener('click', () => generer({ ...reglages, type: selType.value as TypeEtape, graine: Math.floor(Math.random() * 1_000_000) }));
   const basculer = () => { enPause = !enPause; bPause.textContent = enPause ? 'Reprendre' : 'Pause'; dernierT = null; };
@@ -139,7 +146,7 @@ export function monterVueDefilement(parent: HTMLElement): VueDefilement {
 
     if (mesure && intervalle > 0) {
       const m = mesure.m;
-      m.intervalles_ms.push(intervalle); m.dessin_ms.push(derniereInfo.dessin_ms); m.blocsEnCache.push(derniereInfo.cache);
+      m.intervalles_ms.push(intervalle); m.dessin_ms.push(derniereInfo.dessin_ms); m.blocsEnCache.push(derniereInfo.cache); m.cellulesEnCache.push(derniereInfo.cacheCellules);
       // repère du sol : poteau d'hectomètre le plus proche à plus de 40 m devant, suivi tant qu'il est le même
       const k = Math.ceil((s_m + 40) / 100);
       const sp = k * 100;
@@ -165,7 +172,7 @@ export function monterVueDefilement(parent: HTMLElement): VueDefilement {
       const moy = recents.length ? recents.reduce((a, b) => a + b, 0) / recents.length : 0;
       hud.textContent = `${positionKm(l.s_m)} / ${positionKm(etape.longueur_m)}   ${altitude(l.altitude_m)}   pente ${penteSignee(l.pente_ratio)}\n`
         + `${(reglages.vitesse_m_s * 3.6).toFixed(0)} km/h × ${reglages.acceleration}   image ${moy ? moy.toFixed(1) : '–'} ms (${moy ? Math.round(1000 / moy) : '–'} i/s)   dessin ${derniereInfo.dessin_ms.toFixed(1)} ms\n`
-        + `blocs : ${derniereInfo.blocsCharges} à l'écran, ${derniereInfo.cache} en mémoire`;
+        + `blocs : ${derniereInfo.blocsCharges} + ${derniereInfo.cellulesVisibles} cellules à l'écran, ${derniereInfo.cache} + ${derniereInfo.cacheCellules} en mémoire`;
     }
   }
   requestAnimationFrame(image);
@@ -174,6 +181,8 @@ export function monterVueDefilement(parent: HTMLElement): VueDefilement {
   const hooks = {
     etat: () => ({ s_m, longueur_m: etape?.longueur_m ?? 0, enPause, reglages, info: derniereInfo }),
     placer(s: number, pause = true): void { s_m = s; if (pause && !enPause) basculer(); },
+    /** Zoom libre (px par mètre), pour les aperçus larges ; revient au zoom choisi au prochain changement de réglage. */
+    reglerZoomPx(px_m: number): void { if (rendu) rendu.options = { ...rendu.options, zoom_px_m: px_m }; },
     reglerCamera(orientation: ChoixOrientation, zoom: number): void { if (!rendu) return; selOrientation.value = orientation; selZoom.value = String(zoom); appliquerOptions(); },
     /** Fait défiler pendant `duree_reelle_s` secondes (ou jusqu'à l'arrivée) et rend les mesures image par image. */
     mesurer(o: { vitesse_m_s: number; acceleration: number; duree_reelle_s: number; debut_m: number }): Promise<Mesure> {
@@ -181,7 +190,7 @@ export function monterVueDefilement(parent: HTMLElement): VueDefilement {
       inVitesse.value = String(o.vitesse_m_s); selAccel.value = String(o.acceleration); appliquerOptions();
       s_m = o.debut_m; dernierT = null;
       const m: Mesure = { intervalles_ms: [], dessin_ms: [], vitesseApparente_px_s: [], vitesseAttendue_px_s: ZOOM_DE_BASE_PX_M * reglages.zoom * o.vitesse_m_s * o.acceleration,
-        blocsEnCache: [], construits: 0, s_debut_m: o.debut_m, s_fin_m: o.debut_m };
+        blocsEnCache: [], cellulesEnCache: [], construits: 0, s_debut_m: o.debut_m, s_fin_m: o.debut_m };
       return new Promise((resoudre) => { mesure = { m, fin: performance.now() + o.duree_reelle_s * 1000, resoudre, ancre: null, precedent: null }; });
     },
     /**
@@ -191,7 +200,7 @@ export function monterVueDefilement(parent: HTMLElement): VueDefilement {
     ecartPoteauKm(o: { positions: number[]; orientation: Orientation; zoom: number }): { ecarts_px: number[]; manques: number } {
       if (!rendu || !etape) throw new Error('pas d\'étape');
       const avant = { ...rendu.options };
-      rendu.options = { orientation: o.orientation, zoom_px_m: ZOOM_DE_BASE_PX_M * o.zoom, controle: false };
+      rendu.options = { ...rendu.options, orientation: o.orientation, zoom_px_m: ZOOM_DE_BASE_PX_M * o.zoom, controle: false };
       rendu.rafraichirPalette();
       const dpr = window.devicePixelRatio || 1;
       const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
@@ -209,7 +218,7 @@ export function monterVueDefilement(parent: HTMLElement): VueDefilement {
         let sx = 0, sy = 0, sw = 0;
         for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
           const o4 = 4 * (j * n + i), rr = d[o4] as number, gg = d[o4 + 1] as number, bb = d[o4 + 2] as number;
-          if (rr > 170 && gg < 120 && bb < 100) { sx += i + 0.5; sy += j + 0.5; sw++; }
+          if (rr >= 205 && rr <= 222 && gg >= 66 && gg <= 82 && bb >= 34 && bb <= 50) { sx += i + 0.5; sy += j + 0.5; sw++; } // #d64a2a, le poteau km
         }
         if (sw === 0) { manques++; continue; }
         ecarts_px.push(Math.hypot((x0 + sx / sw) / dpr - e.x_px, (y0 + sy / sw) / dpr - e.y_px));
@@ -224,7 +233,7 @@ export function monterVueDefilement(parent: HTMLElement): VueDefilement {
     couverture(o: { positions: number[]; orientation: Orientation; zoom: number }): { points: number; erreurs: number; exemples: string[] } {
       if (!rendu || !etape) throw new Error('pas d\'étape');
       const avant = { ...rendu.options };
-      rendu.options = { orientation: o.orientation, zoom_px_m: ZOOM_DE_BASE_PX_M * o.zoom, controle: true };
+      rendu.options = { ...rendu.options, orientation: o.orientation, zoom_px_m: ZOOM_DE_BASE_PX_M * o.zoom, controle: true };
       rendu.rafraichirPalette();
       const dpr = window.devicePixelRatio || 1;
       const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;

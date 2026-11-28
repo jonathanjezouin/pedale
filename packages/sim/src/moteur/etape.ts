@@ -28,6 +28,7 @@ export interface LectureEtape {
 }
 
 export interface Point2D { readonly x_m: number; readonly y_m: number }
+export interface ProjectionEtape { readonly s_m: number; readonly d_m: number; readonly bord_m: number; readonly cap_rad: number }
 export interface BordsEtape {
   readonly gaucheAccotement: Point2D;
   readonly gaucheChaussee: Point2D;
@@ -76,8 +77,17 @@ export interface Etape {
   bords(s_m: number): BordsEtape;
   /** Point du plan à l'abscisse `s` et au décalage `d` (positif à gauche), sans toucher à l'étape. */
   versMonde(s_m: number, d_m: number): Point2D;
+  /** Demi-largeur de chaussée (sans accotement) à l'abscisse `s`. */
+  demiChaussee(s_m: number): number;
   /** Demi-largeur de chaussée + accotement à l'abscisse `s`. */
   demiTotale(s_m: number): number;
+  /**
+   * Où est la route par rapport à ce point du plan : abscisse et décalage du point le plus proche de l'axe, cap de la route,
+   * et `bord_m` = distance au bord extérieur de l'accotement (négative sur la route ou l'accotement).
+   * `null` si l'axe est à plus de 12 m : le point est alors à plus de 7 m de tout bord de route.
+   * Avec `indice_s_m`, seuls les segments à ±400 m de cet indice sont examinés (beaucoup plus rapide ; null si la route proche en est plus loin).
+   */
+  projeter(x_m: number, y_m: number, indice_s_m?: number): ProjectionEtape | null;
   echantillonner(pas_m: number): EchantillonsEtape;
 }
 
@@ -141,7 +151,13 @@ export function creerEtape(graine: number, type: TypeEtape, longueur_m: number):
     },
     bords(s_m) { return route2d.bords(s_m); },
     versMonde(s_m, d_m) { const q = route2d.versMonde(s_m, d_m); return { x_m: q.x_m, y_m: q.y_m }; },
+    demiChaussee(s_m) { return route2d.demiChaussee_m(s_m); },
     demiTotale(s_m) { return route2d.demiTotale_m(s_m); },
+    projeter(x_m, y_m, indice_s_m) {
+      const r = route2d.versRoute(x_m, y_m, indice_s_m);
+      if (!r) return null;
+      return { s_m: r.s_m, d_m: r.d_m, bord_m: Math.abs(r.d_m) - route2d.demiTotale_m(r.s_m), cap_rad: trace.route.point(r.s_m).cap_rad };
+    },
     echantillonner(pas_m) {
       const n = Math.max(1, Math.ceil(longueur_m / pas_m));
       const s: number[] = [], x: number[] = [], y: number[] = [], z: number[] = [], c: (0 | 1 | 2)[] = [];

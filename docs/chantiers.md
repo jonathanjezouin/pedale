@@ -16,6 +16,7 @@
 6. **Vérité unique** : la simulation (TypeScript pur, déterministe par seed) ne connaît pas l'affichage ; l'affichage ne fait que la lire. Quand quelque chose est faux, on sait ainsi dans quelle couche chercher.
 7. **Pas de gras dans le périmètre** : on ne traite pas ce qui appartient à un chantier suivant, même si c'est tentant.
 8. À la fin de chaque chantier : une courte note (ce qui a été fait, chiffres de validation, ce qu'on retient de l'archive) et une version.
+9. **Numéro de version `0.C.U`** : C est le chantier en cours, U la dernière unité fonctionnelle terminée de ce chantier (décision du propriétaire, UF 2.7). La version est tenue à jour dans `package.json` (racine, `apps/jeu`, `packages/sim`) et dans `VERSION_SIM` (affichée dans l'en-tête de l'appli). Exemple : `0.2.7` = chantier 2, UF 2.7. Un chantier terminé et validé passe à `0.(C+1).0`.
 
 Structure du code commune à tous les chantiers : [`architecture.md`](architecture.md).
 
@@ -318,7 +319,7 @@ Communes : variation de largeur ≤ 0,02 m par m (soit 2 m de moins en 100 m au 
 
 **Pour l'essayer** : `npm run dev`, onglet « Défilement » (adresse `#defilement?type=montagne&km=200&graine=1&v=12&k=1&o=auto`). Vitesse de 5 à 25 m/s, temps ×1, ×4, ×16, ×64, caméra, zoom, curseur de position, Espace pour la pause.
 
-### UF 2.7 — Décor de bord de route (reprise de l'archive)
+### UF 2.7 — Décor de bord de route (reprise de l'archive)  *(réalisée : `apps/jeu/src/defilement/` (biomes, items, ambiance, bord, peinture), `test/decor.test.ts`, 12 tests ; en attente de la validation du propriétaire)*
 
 **Contenu** : biomes, végétation, public, bord de route. Réutilisation du décor de l'archive, revérifié, et adapté à la nouvelle route.
 
@@ -327,6 +328,24 @@ Communes : variation de largeur ≤ 0,02 m par m (soit 2 m de moins en 100 m au 
 - [auto] Le décor suit exactement les bords de route de l'UF 2.4 (aucun élément sur la chaussée).
 - [auto] Les critères de performance et de mémoire de l'UF 2.6 restent satisfaits avec le décor.
 - [valid] Je valide le rendu sur les biomes retenus.
+
+**Décisions prises.**
+- **Biomes retenus : les quatre de l'archive** (prairie, désert, automne, montagne), revérifiés avec la route actuelle. Choix automatique selon le type d'étape, comme à la v0.0.6 (plaine → prairie, vallonné → automne, montagne → montagne), ou choix manuel dans la vue « Défilement » (adresse `…&b=desert`). Les quatre sont à valider à l'œil (critère `[valid]`) ; en retirer un ne demande qu'une ligne.
+- **Repris de l'archive** : palettes, taches de sol, champs (sillons en prairie et en automne), lacs (prairie et automne), bosquets, arbres (feuillus, conifères), buissons, rochers, cactus, bottes de foin, maisons (toit plat en désert), public (spectateurs, fanions, parasols), barrières, tentes, allées d'arbres, damier et portique d'arrivée, flamme rouge à 1 km, plus la ligne de départ, les traces de roues, la bande d'herbe et l'ombre de la chaussée.
+- **Non repris** : les panneaux de distance (du texte, illisible quand la caméra tourne) et le grain du bitume (à 6 px par mètre, des points de 0,05 m sont sous le pixel : du scintillement, pas du détail).
+- **Ce qui change par rapport à l'archive** : le décor de l'archive était fait de tuiles-textures de 1 024 px, c'est-à-dire l'approche qui « grattait ». Ici tout est géométrie vectorielle ancrée dans le monde. Les tailles sont à l'échelle réelle (un arbre : 1,8 à 3,6 m de rayon, contre 0,5 à 1 m dans l'archive). La scène est toujours en lumière du jour : les palettes ne s'assombrissent pas avec le thème sombre de l'interface.
+
+**Construction.** Deux familles. (1) Le **décor ambiant** (forêts, buissons, rochers, champs, lacs, maisons, taches de sol) est découpé en cellules de 128 m du plan, chacune tirée de (graine, cellule) : même graine, même décor, densité uniforme quelle que soit la forme de la route. Chaque élément est refusé s'il touche la route ; la recherche de la route ne regarde que les blocs voisins de la cellule, et rien du tout pour les cellules sans route à proximité (même résultat que la recherche complète, vérifié cellule par cellule). Les champs sont contrôlés sur tout leur pourtour et leur intérieur, pas seulement en 9 points. (2) Le **décor de bord de route** (barrières à 0,7 m de l'accotement, spectateurs sur 3 à 5 rangs, tentes, allées d'arbres espacées de 5 à 8 m, damier, portiques, poteaux) est posé par abscisse et décalage, donc jamais sur la route. À l'arrivée : damier de 3 rangées sur toute la largeur, portique, foule des deux côtés. Tout est peint une fois en chemins `Path2D` regroupés par couche et par couleur ; à chaque image, seule la matrice de la caméra change. La route se peint en passes sur **tous** les blocs (herbe, accotement, ombre, chaussée), pas bloc par bloc : voir les incidents. Les cellules sont construites à l'avance (autour des positions à 150, 300 et 450 m devant, 2 par image au plus), avec les blocs de route.
+
+**Mesures** (`node tools/mesure-defilement.mjs`, avec le décor ; rapport dans `docs/mesures/uf-2-7-defilement-avec-decor.txt`) : les critères de l'UF 2.6 sont tous tenus, 8 sur 8. Couverture : 1,08 million de pixels, 0 erreur. Position d'un poteau kilométrique vue/prédite : 0,64 px au plus sur 720 poteaux. Durée d'image (montagne 200 km, 25 m/s, 2 densités d'écran × 2 caméras × ×1 à ×64) : 14 401 images, 2 au-dessus de 20 ms (0,014 %), **aucune au-dessus de 50 ms**, la plus longue 33,3 ms ; coût de dessin 0,3 à 0,7 ms en moyenne, 7,6 ms au pire. Mémoire sur 200 km à ×64 : tas médian 5,82 → 5,57 Mo (−4 %) ; 96 blocs et 96 cellules en mémoire au plus ; 1 000 blocs construits pour 1 000 blocs de route.
+
+**Critères automatiques propres à l'UF 2.7** (`test/decor.test.ts`) : aucun élément ambiant ne touche la chaussée ni les accotements, pour les 4 biomes et les 3 types d'étape (plus de 5 000 éléments, contrôle au mètre indépendant du générateur) ; aucun champ ni lac ne touche la route sur tout son contour ; barrières à la bonne distance, spectateurs derrière elles ; seuls la ligne, le damier et les portiques sont sur la route (par construction) ; déterminisme ; allées absentes du désert. **Pas de motif répété** : sur 3,6 km de défilement (5 minutes à 12 m/s), aucune paire de cellules ne partage plus de 15 % de ses éléments (similarité de Jaccard, valeur du hasard), et les zones de public sont toutes différentes. Vérifié aussi sur trois aperçus de 3,6 km à un pixel par mètre : `docs/captures/uf-2-7-apercu-5-minutes-*.jpg`.
+
+**Incidents rencontrés et corrigés.** (1) Le contrôle de couverture a trouvé une couture que j'avais introduite : en regroupant les remplissages par bloc, le vert d'accotement du bloc suivant se mêlait au gris de la chaussée du précédent (environ 25 % de vert, 407 pixels faux). La route se peint maintenant en passes sur tous les blocs. (2) Les champs pouvaient chevaucher la route : seuls 9 points étaient contrôlés par champ, donc une route de 6 m passait entre deux points. Trouvé par le test indépendant ; corrigé. (3) La construction d'une cellule coûtait 5 à 10 ms (une recherche sur toute la route par élément) : 34 images dépassaient 20 ms et 9 dépassaient 50 ms. Recherche limitée aux blocs voisins et construction anticipée : plus de 0,014 % d'images lentes. (4) Un poteau kilométrique pouvait être masqué par un arbre d'allée ou un spectateur : les poteaux se peignent au-dessus de tout, et les allées s'écartent.
+
+**Limites connues.** La route s'arrête net au départ et à l'arrivée (rien avant la ligne de départ, ni après le portique). La fréquence des lacs (3,5 % des cellules) et des maisons est un réglage de goût, à ajuster à l'œil. Le décor ne dépend pas du relief (pas d'ombrage selon la pente).
+
+**Pour l'essayer** : onglet « Défilement », menu « Décor » (auto ou un des quatre biomes). Aller au départ ou à l'arrivée avec le curseur de position (un autre biome et un autre type d'étape changent beaucoup l'aspect).
 
 ---
 
