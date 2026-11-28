@@ -16,7 +16,7 @@
 6. **Vérité unique** : la simulation (TypeScript pur, déterministe par seed) ne connaît pas l'affichage ; l'affichage ne fait que la lire. Quand quelque chose est faux, on sait ainsi dans quelle couche chercher.
 7. **Pas de gras dans le périmètre** : on ne traite pas ce qui appartient à un chantier suivant, même si c'est tentant.
 8. À la fin de chaque chantier : une courte note (ce qui a été fait, chiffres de validation, ce qu'on retient de l'archive) et une version.
-9. **Numéro de version `0.C.U`** : C est le chantier en cours, U la dernière unité fonctionnelle terminée de ce chantier (décision du propriétaire, UF 2.7). La version est tenue à jour dans `package.json` (racine, `apps/jeu`, `packages/sim`) et dans `VERSION_SIM` (affichée dans l'en-tête de l'appli). Exemple : `0.2.7` = chantier 2, UF 2.7. Un chantier terminé et validé passe à `0.(C+1).0`.
+9. **Numéro de version `0.C.U`** : C est le chantier en cours, U la dernière unité fonctionnelle terminée de ce chantier (décision du propriétaire, UF 2.7). La version est tenue à jour dans `package.json` (racine, `apps/jeu`, `packages/sim`) et dans `VERSION_SIM` (affichée dans l'en-tête de l'appli). Exemple : `0.2.7` = chantier 2, UF 2.7. Un chantier terminé et validé passe à `0.(C+1).0` (le chantier 2 validé : `0.3.0`).
 
 Structure du code commune à tous les chantiers : [`architecture.md`](architecture.md).
 
@@ -143,7 +143,7 @@ Le choix du rendu est volontairement réversible : il n'engage que la couche d'a
 
 ---
 
-## 6. Chantier 2 — La route
+## 6. Chantier 2 — La route  *(terminé et validé, version 0.3.0)*
 
 **But** : disposer d'une route réaliste (tracé + profil d'altitude) sur laquelle un coureur pourra rouler, et la regarder défiler sans défaut graphique, quelle que soit la longueur de l'étape.
 
@@ -346,6 +346,29 @@ Communes : variation de largeur ≤ 0,02 m par m (soit 2 m de moins en 100 m au 
 **Limites connues.** La route s'arrête net au départ et à l'arrivée (rien avant la ligne de départ, ni après le portique). La fréquence des lacs (3,5 % des cellules) et des maisons est un réglage de goût, à ajuster à l'œil. Le décor ne dépend pas du relief (pas d'ombrage selon la pente).
 
 **Pour l'essayer** : onglet « Défilement », menu « Décor » (auto ou un des quatre biomes). Aller au départ ou à l'arrivée avec le curseur de position (un autre biome et un autre type d'étape changent beaucoup l'aspect).
+
+### Note de fin de chantier 2 (version 0.3.0)
+
+**Fait.** Une route complète, de la simulation à l'écran. *Simulation* : géométrie de l'axe (segments à courbure constante, position et cap analytiques), profil d'étape (cols, bosses, plats, descentes, altitude exacte), tracé conditionné par la pente (droites et virages doux sur le plat, lacets sur les fortes pentes, sans jamais se recroiser), largeur de chaussée et accotements avec conversion exacte entre `(s, d)` et le plan. *Application* : une vue « Étape » (carte de toute l'étape, profil, loupe sur la route, curseur synchronisé, « Autre route » en une action) et une vue « Défilement » (une caméra suit un point à vitesse constante sur 200 km, aux temps ×1 à ×64) avec un décor de quatre biomes, du public et une arrivée. L'application ne lit la route que par une façade en lecture seule, `creerEtape(graine, type, longueur)`, dans `moteur/`.
+
+**Chiffres de validation** (`npm test`, 219 tests, environ 70 s ; `node tools/mesure-defilement.mjs`, 8 critères dans un navigateur) :
+- **Tracé** : 1 000 seeds de 20 à 100 km, plus 30 seeds de 100 à 250 km, par type d'étape, sans échec ; aucun recroisement ni frôlement (écart ≥ 3 largeurs, vérifié par un contrôle indépendant du générateur) ; rayons, droites longues, part de droite, virages par km et angle moyen dans les bornes du tableau de l'UF 2.2 ; longueur à 1 % près. L'effet de la pente est mesuré sur 1 000 seeds : part de droite décroissante et angle des virages croissant avec la pente (32/26/23 % et 22/27/35° en vallonné ; 17/13/10 % et 32/42/56° en montagne) ; lacets à 90 % au moins sur pente forte.
+- **Profil** : 1 000 seeds par type, de 20 à 250 km : pentes, dénivelé par km, altitude, variation de pente bornée à 1 point par 100 m, tronçons contigus.
+- **Largeur et conversion `(s, d)`** : erreur d'aller-retour de l'ordre de 10⁻¹¹ m sur 10 000 points (le critère était 1 cm), lacets de 20 m de rayon compris ; largeur bornée et sans saut sur 1 000 seeds par type.
+- **Défilement** (montagne 200 km, 25 m/s, deux densités d'écran, deux caméras, ×1 à ×64) : 14 401 images, **aucune au-dessus de 50 ms**, 2 au-dessus de 20 ms (0,014 %), la plus longue 33 ms ; vitesse apparente d'un repère du sol constante à 0,0012 % près hors virages ; 1,08 million de pixels contrôlés sans trou ni couture ; mémoire stable sur 200 km à ×64 (−4 % entre les deux derniers tiers) ; caches de blocs et de cellules plafonnés à 96, chaque bloc construit une seule fois.
+- **Décor** : plus de 5 000 éléments contrôlés au mètre, aucun sur la chaussée ni sur les accotements ; aucune disposition recopiée sur 5 minutes de défilement.
+- Les tests ont été éprouvés par des **défauts volontaires** (casser la formule, retirer une garde, désactiver un contrôle) : chacun est attrapé.
+
+**Validé par le propriétaire.** Les valeurs des tableaux des UF 2.2, 2.3 et 2.2b, l'ordre « profil avant tracé », les planches de tracés et de profils, la vue « Étape », le défilement et le décor, puis le chantier.
+
+**À retenir.**
+- **Décision de méthode en cours de chantier** : le profil est généré avant le tracé (UF 2.3 avant 2.2b), ce qui a permis de placer les lacets là où la route grimpe fort. Le numéro de version `0.C.U` est né ici.
+- **Réglages par défaut, à réviser** : les largeurs de route de l'UF 2.4 (proposées au démarrage de l'UF, essayées, non contestées) ; les seuils de pente à 3 % et 7 % ; le plafond de dénivelé en montagne (au plus 39 m/km environ avec des pentes réalistes, la cible est tirée entre 28 et 35 m/km) ; la caméra « auto » (route vers le haut jusqu'à ×4, nord en haut au-delà, car à ×16 la caméra tourne de 3 tours par seconde dans les lacets) ; la fréquence des lacs et des maisons.
+- **Canvas 2D suffit, PixiJS n'est pas nécessaire** pour ce besoin : rien n'est une texture, la route et le décor sont de la géométrie vectorielle ancrée dans le monde. À rouvrir si le décor devient très riche.
+- **Les mesures de défilement sont hors `npm test`** : elles demandent un navigateur (Playwright n'est pas une dépendance du projet). `tools/mesure-defilement.mjs` est à relancer à chaque modification du rendu ; il a trouvé à lui seul quatre défauts (une couture sur la route, des champs qui traversaient la route, des images lentes, des poteaux masqués) et une fuite de mémoire de la boucle du coureur témoin qui continuait de tourner sous les autres onglets.
+- **À brancher au chantier 3** : la route existe mais le coureur roule encore sur la piste droite du chantier 1 (`Piste`). Le chantier 3 doit lire la route par la façade (position `(s, d)`, pente, courbure, largeur) pour la physique et pour l'Observation (`routeDevant`, déjà dans les contrats). La pente est déjà disponible (`lire(s).pente_ratio`).
+- **Limites connues** : la route s'arrête net au départ et à l'arrivée ; la scène reste en lumière du jour même en thème sombre ; le décor ne dépend pas du relief.
+- **De l'archive** : le décor a été le premier emprunt. Seul le vocabulaire visuel (palettes, objets, biomes) est repris ; le décor de l'archive, fait de tuiles-textures, a été entièrement réécrit en géométrie vectorielle, à l'échelle réelle.
 
 ---
 
